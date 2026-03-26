@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Sala do Tempo - Oficial</title>
+    <title>Sala do Tempo - Vínculo Real</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -12,9 +12,10 @@
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f1a; color: white; margin: 0; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f1a; color: white; }
         .custom-scroll::-webkit-scrollbar { width: 6px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .row-hover:hover { background-color: rgba(249, 115, 22, 0.05); }
     </style>
 </head>
 <body>
@@ -22,7 +23,7 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } = Recharts;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
 
         const SUPABASE_URL = 'https://sflzuzorlmddprbkdczv.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3viV5YSChpIMXYHAz-e-5g_GzP1d0E8';
@@ -46,11 +47,11 @@
                     const { data: sess } = await supabase.from('sessoes').select('*');
                     setPlano(cron || []);
                     setSessoes(sess || []);
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Erro ao buscar dados:", e); }
                 finally { setLoading(false); }
             }
 
-            async function salvarTarefa(e) {
+            async function handlePlano(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
                 const dados = {
@@ -70,11 +71,11 @@
                 }
             }
 
-            async function registrarDesempenho(e) {
+            async function handleExecucao(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
                 const registro = {
-                    cronograma_id: tarefaParaExecutar.id,
+                    cronograma_id: tarefaParaExecutar.id, // VÍNCULO UUID
                     meta: tarefaParaExecutar.meta,
                     disciplina: tarefaParaExecutar.disciplina,
                     assunto: tarefaParaExecutar.assunto,
@@ -86,89 +87,98 @@
                 if (!error) {
                     setTarefaParaExecutar(null);
                     fetchData();
-                } else {
-                    alert("Erro ao salvar! Verifique se a coluna 'cronograma_id' existe na tabela 'sessoes'.");
-                }
+                } else { alert("Erro ao salvar! Verifique a conexão."); }
             }
 
             const dadosGrafico = useMemo(() => {
-                const map = {};
-                for(let i=1; i<=14; i++) map[i] = { name: `M${i}`, horas: 0 };
-                sessoes.forEach(s => {
-                    if(map[s.meta]) map[s.meta].horas += (s.tempo / 60);
+                const metas = [...new Set(plano.map(p => p.meta))].sort((a,b) => a-b);
+                return metas.map(m => {
+                    const sessMeta = sessoes.filter(s => s.meta === m);
+                    return {
+                        name: `M${m}`,
+                        horas: sessMeta.reduce((acc, curr) => acc + (curr.tempo / 60), 0)
+                    };
                 });
-                return Object.values(map);
-            }, [sessoes]);
+            }, [sessoes, plano]);
 
-            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black">CARREGANDO...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black italic">SALA DO TEMPO...</div>;
 
             return (
                 <div className="flex min-h-screen">
                     {/* SIDEBAR */}
                     <aside className="w-20 md:w-64 bg-[#111827] border-r border-slate-800 fixed h-full z-40">
-                        <div className="p-8 text-orange-500 font-black italic hidden md:block">SALA DO TEMPO</div>
+                        <div className="p-8 text-orange-500 font-black text-xl italic hidden md:block uppercase">Sala do Tempo</div>
                         <nav className="p-4 space-y-4">
-                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='dashboard'?'bg-orange-500':'text-slate-500'}`}>
-                                <i className="lucide-layout-grid"></i> <span className="hidden md:block font-bold">Dashboard</span>
+                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex gap-4 items-center transition-all ${aba==='dashboard'?'bg-orange-500 shadow-lg shadow-orange-500/20':'text-slate-500 hover:text-white'}`}>
+                                <i className="lucide-layout-grid"></i> <span className="hidden md:block font-bold text-sm">Painel Principal</span>
                             </button>
-                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='planejar'?'bg-orange-500':'text-slate-500'}`}>
-                                <i className="lucide-calendar"></i> <span className="hidden md:block font-bold">Cronograma</span>
+                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-2xl flex gap-4 items-center transition-all ${aba==='planejar'?'bg-orange-500 shadow-lg shadow-orange-500/20':'text-slate-500 hover:text-white'}`}>
+                                <i className="lucide-clipboard-list"></i> <span className="hidden md:block font-bold text-sm">Cronograma</span>
                             </button>
                         </nav>
                     </aside>
 
                     <main className="flex-1 ml-20 md:ml-64 p-6 md:p-10">
                         {aba === 'dashboard' ? (
-                            <div className="max-w-6xl mx-auto space-y-8">
-                                <h2 className="text-3xl font-black italic">PAINEL DE <span className="text-orange-500">CONTROLE</span></h2>
-                                
-                                {/* GRÁFICO */}
-                                <div className="bg-[#111827] p-6 rounded-3xl border border-slate-800 h-64">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={dadosGrafico}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                            <XAxis dataKey="name" stroke="#475569" fontSize={10} />
-                                            <YAxis stroke="#475569" fontSize={10} />
-                                            <Tooltip contentStyle={{backgroundColor: '#0b0f1a', borderRadius: '10px', border: 'none'}} />
-                                            <Area type="monotone" dataKey="horas" stroke="#f97316" fill="#f97316" fillOpacity={0.1} strokeWidth={3} />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
+                            <div className="max-w-6xl mx-auto space-y-10">
+                                <header>
+                                    <h2 className="text-4xl font-black italic uppercase">Controle de <span className="text-orange-500 text-6xl block">Performance</span></h2>
+                                </header>
+
+                                {/* GRÁFICO DE LINHA */}
+                                <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl">
+                                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 italic">Evolução por Meta (Horas)</h3>
+                                    <div className="h-48">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={dadosGrafico}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                                <XAxis dataKey="name" stroke="#475569" fontSize={10} fontWeight="bold" />
+                                                <YAxis stroke="#475569" fontSize={10} />
+                                                <Tooltip contentStyle={{backgroundColor: '#0b0f1a', border: '1px solid #334155', borderRadius: '12px'}} />
+                                                <Area type="monotone" dataKey="horas" stroke="#f97316" strokeWidth={4} fill="#f97316" fillOpacity={0.1} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </div>
 
-                                {/* TABELA DASHBOARD */}
-                                <div className="bg-[#111827] rounded-3xl border border-slate-800 overflow-hidden">
+                                {/* TABELA DASHBOARD ESTILO PLANILHA */}
+                                <div className="bg-[#111827] rounded-[2.5rem] border border-slate-800 overflow-hidden shadow-2xl">
                                     <table className="w-full text-left">
-                                        <thead className="bg-slate-900/50 text-[10px] uppercase text-slate-500 font-black">
+                                        <thead className="bg-slate-900/50 text-[10px] uppercase text-slate-500 font-black italic">
                                             <tr>
-                                                <th className="p-5">Meta</th>
-                                                <th className="p-5">Tarefa</th>
-                                                <th className="p-5 text-center">Tempo</th>
-                                                <th className="p-5 text-center">Desempenho</th>
-                                                <th className="p-5 text-right">Registrar</th>
+                                                <th className="p-6">Meta</th>
+                                                <th className="p-6">Disciplina / Assunto</th>
+                                                <th className="p-6 text-center">Tempo Acumulado</th>
+                                                <th className="p-6 text-center">Desempenho Q.</th>
+                                                <th className="p-6 text-right">Ação</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-800/50">
-                                            {plano.map(p => {
+                                        <tbody className="divide-y divide-slate-800/50 font-bold">
+                                            {plano.length === 0 ? (
+                                                <tr><td colSpan="5" className="p-10 text-center text-slate-600">Nenhum dado no cronograma.</td></tr>
+                                            ) : plano.map(p => {
                                                 const exec = sessoes.filter(s => s.cronograma_id === p.id);
-                                                const tempo = exec.reduce((a,b)=>a+b.tempo, 0);
+                                                const tempoTotal = exec.reduce((a,b)=>a+b.tempo, 0);
                                                 const qT = exec.reduce((a,b)=>a+b.total, 0);
                                                 const qC = exec.reduce((a,b)=>a+b.certas, 0);
                                                 const perc = qT > 0 ? Math.round((qC/qT)*100) : 0;
 
                                                 return (
-                                                    <tr key={p.id} className="hover:bg-slate-800/20">
-                                                        <td className="p-5 font-black text-orange-500">M{p.meta}</td>
-                                                        <td className="p-5">
-                                                            <div className="font-bold">{p.disciplina}</div>
-                                                            <div className="text-xs text-slate-500">{p.assunto}</div>
+                                                    <tr key={p.id} className="row-hover transition-colors">
+                                                        <td className="p-6"><span className="bg-slate-800 text-orange-500 px-3 py-1 rounded-full text-[10px] italic border border-orange-500/20">#{p.meta}</span></td>
+                                                        <td className="p-6">
+                                                            <div className="text-slate-100">{p.disciplina}</div>
+                                                            <div className="text-xs text-slate-500 italic font-normal">{p.assunto}</div>
                                                         </td>
-                                                        <td className="p-5 text-center font-mono text-sm">{tempo}m</td>
-                                                        <td className="p-5 text-center">
-                                                            <div className={`text-lg font-black ${perc >= 70 ? 'text-emerald-500' : 'text-orange-500'}`}>{qT > 0 ? `${perc}%` : '--'}</div>
-                                                            <div className="text-[10px] text-slate-600 font-bold">{qT} Qs</div>
+                                                        <td className="p-6 text-center text-orange-500 font-mono">{tempoTotal} min</td>
+                                                        <td className="p-6 text-center">
+                                                            <div className={`text-xl font-black ${perc >= 75 ? 'text-emerald-500' : 'text-orange-500'}`}>{qT > 0 ? `${perc}%` : '--'}</div>
+                                                            <div className="text-[10px] text-slate-600 uppercase font-black">{qT} questões</div>
                                                         </td>
-                                                        <td className="p-5 text-right">
-                                                            <button onClick={()=>setTarefaParaExecutar(p)} className="p-2 bg-orange-500 rounded-lg"><i className="lucide-play w-4 h-4"></i></button>
+                                                        <td className="p-6 text-right">
+                                                            <button onClick={()=>setTarefaParaExecutar(p)} className="p-3 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all">
+                                                                <i className="lucide-play w-4 h-4 fill-current"></i>
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 );
@@ -178,24 +188,38 @@
                                 </div>
                             </div>
                         ) : (
-                            <div className="max-w-2xl mx-auto space-y-6">
-                                <h2 className="text-3xl font-black">Planejar <span className="text-orange-500">Ciclo</span></h2>
-                                <form onSubmit={salvarTarefa} className="bg-[#111827] p-8 rounded-3xl border border-slate-800 grid grid-cols-2 gap-4">
-                                    <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Meta #" className="bg-slate-950 p-4 rounded-xl border border-slate-800" required />
-                                    <select name="tipo" defaultValue={editando?.tipo} className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                        <option>Teoria</option><option>Questões</option><option>Revisão</option>
-                                    </select>
-                                    <select name="disciplina" defaultValue={editando?.disciplina} className="col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                        {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
-                                    </select>
-                                    <input name="assunto" defaultValue={editando?.assunto} placeholder="Assunto" className="col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-800" required />
-                                    <button className="col-span-2 bg-orange-500 py-4 rounded-xl font-black">{editando ? 'ATUALIZAR' : 'CADASTRAR TAREFA'}</button>
-                                </form>
-                                <div className="space-y-2">
+                            /* ABA PLANEJAMENTO */
+                            <div className="max-w-3xl mx-auto space-y-8">
+                                <div className="bg-[#111827] p-10 rounded-[3rem] border border-slate-800 shadow-2xl">
+                                    <h2 className="text-2xl font-black mb-8 italic flex items-center gap-3">
+                                        <i className="lucide-edit-3 text-orange-500"></i> {editando ? "Editar Tarefa" : "Novo Cronograma"}
+                                    </h2>
+                                    <form onSubmit={handlePlano} className="grid grid-cols-2 gap-6">
+                                        <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Número da Meta" className="bg-[#0b0f1a] p-4 rounded-2xl border border-slate-800 outline-none font-bold" required />
+                                        <select name="tipo" defaultValue={editando?.tipo} className="bg-[#0b0f1a] p-4 rounded-2xl border border-slate-800 outline-none font-bold">
+                                            <option>Teoria</option><option>Questões</option><option>Revisão</option><option>Simulado</option>
+                                        </select>
+                                        <select name="disciplina" defaultValue={editando?.disciplina} className="col-span-2 bg-[#0b0f1a] p-4 rounded-2xl border border-slate-800 outline-none font-bold">
+                                            {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
+                                        </select>
+                                        <input name="assunto" defaultValue={editando?.assunto} placeholder="Qual o assunto desse estudo?" className="col-span-2 bg-[#0b0f1a] p-4 rounded-2xl border border-slate-800 outline-none font-bold" required />
+                                        <button className="col-span-2 bg-orange-500 text-white py-5 rounded-2xl font-black shadow-lg uppercase tracking-tighter">
+                                            {editando ? "Salvar Alterações" : "Adicionar ao Planejamento"}
+                                        </button>
+                                        {editando && <button type="button" onClick={()=>setEditando(null)} className="col-span-2 text-xs text-slate-500 font-bold uppercase">Cancelar Edição</button>}
+                                    </form>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h3 className="text-xs font-black uppercase text-slate-500 ml-4 italic">Lista de Tarefas</h3>
                                     {plano.map(t => (
-                                        <div key={t.id} className="bg-[#111827] p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                                            <span className="text-sm">M{t.meta} - <b>{t.disciplina}</b></span>
-                                            <button onClick={()=>setEditando(t)} className="text-slate-500 hover:text-orange-500"><i className="lucide-pencil w-4 h-4"></i></button>
+                                        <div key={t.id} className="bg-[#111827] p-6 rounded-3xl border border-slate-800 flex justify-between items-center group">
+                                            <div>
+                                                <span className="text-[10px] font-black text-orange-500">META {t.meta}</span>
+                                                <h4 className="text-lg font-bold text-slate-200">{t.disciplina}</h4>
+                                                <p className="text-sm text-slate-500 font-normal">{t.assunto}</p>
+                                            </div>
+                                            <button onClick={()=>setEditando(t)} className="p-3 text-slate-500 hover:text-white transition-all"><i className="lucide-pencil w-5 h-5"></i></button>
                                         </div>
                                     ))}
                                 </div>
@@ -203,20 +227,29 @@
                         )}
                     </main>
 
-                    {/* MODAL REGISTRO */}
+                    {/* MODAL DE REGISTRO (PLAY) */}
                     {tarefaParaExecutar && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-[#111827] w-full max-w-sm p-8 rounded-[2rem] border border-orange-500/30">
-                                <h3 className="text-xl font-black mb-1">{tarefaParaExecutar.disciplina}</h3>
-                                <p className="text-orange-500 text-xs font-bold mb-6 italic">{tarefaParaExecutar.assunto}</p>
-                                <form onSubmit={registrarDesempenho} className="space-y-4">
-                                    <input name="tempo" type="number" placeholder="Minutos" className="w-full bg-slate-950 p-4 rounded-xl border border-slate-800" required />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input name="total" type="number" placeholder="Questões" className="w-full bg-slate-950 p-4 rounded-xl border border-slate-800" />
-                                        <input name="certas" type="number" placeholder="Certas" className="w-full bg-slate-950 p-4 rounded-xl border border-emerald-900 text-emerald-500" />
+                        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                            <div className="bg-[#111827] w-full max-w-sm p-10 rounded-[3rem] border border-orange-500/30 shadow-2xl">
+                                <h3 className="text-2xl font-black mb-1">{tarefaParaExecutar.disciplina}</h3>
+                                <p className="text-orange-500 text-sm font-bold italic mb-8 uppercase tracking-tighter">{tarefaParaExecutar.assunto}</p>
+                                <form onSubmit={handleExecucao} className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Tempo (minutos)</label>
+                                        <input name="tempo" type="number" className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-slate-800 font-bold" required />
                                     </div>
-                                    <button className="w-full bg-orange-500 py-4 rounded-xl font-black">SALVAR</button>
-                                    <button type="button" onClick={()=>setTarefaParaExecutar(null)} className="w-full text-slate-500 text-xs font-bold uppercase py-2">Cancelar</button>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Q. Total</label>
+                                            <input name="total" type="number" className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-slate-800 font-bold" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase ml-2 text-emerald-500">Certas</label>
+                                            <input name="certas" type="number" className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-emerald-900/30 text-emerald-400 font-bold" />
+                                        </div>
+                                    </div>
+                                    <button className="w-full bg-orange-500 py-5 rounded-2xl font-black text-lg">SALVAR SESSÃO</button>
+                                    <button type="button" onClick={()=>setTarefaParaExecutar(null)} className="w-full text-slate-600 font-bold text-xs uppercase">Fechar</button>
                                 </form>
                             </div>
                         </div>
