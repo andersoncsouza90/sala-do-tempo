@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sala do Tempo - Sidebar Edition</title>
+    <title>Sala do Tempo - Workflow</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -11,11 +11,10 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased">
@@ -30,51 +29,70 @@
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         const DISCIPLINAS = ["Português", "Matemática Financeira", "Estatística", "Direito Tributário", "LTE", "Contabilidade Geral", "Contabilidade de Custos", "Auditoria", "TI", "Direito Constitucional", "Direito Administrativo", "Direito Civil", "Direito Empresarial", "Direito Penal", "Administração Geral e Pública"];
-        const CATEGORIAS = ["Teoria", "Questões", "Teste", "Revisão", "Simulado"];
 
         function App() {
             const [sessoes, setSessoes] = useState([]);
+            const [plano, setPlano] = useState([]);
             const [aba, setAba] = useState('dashboard');
             const [loading, setLoading] = useState(true);
+            const [toast, setToast] = useState(null);
+            const [tarefaSelecionada, setTarefaSelecionada] = useState(null);
 
             useEffect(() => { fetchData(); }, []);
 
             async function fetchData() {
                 setLoading(true);
-                const { data } = await supabase.from('sessoes').select('*').order('created_at', { ascending: false });
-                if (data) setSessoes(data);
+                const { data: sessoesData } = await supabase.from('sessoes').select('*').order('created_at', { ascending: false });
+                const { data: planoData } = await supabase.from('cronograma').select('*').order('meta', { ascending: true });
+                if (sessoesData) setSessoes(sessoesData);
+                if (planoData) setPlano(planoData);
                 setLoading(false);
             }
 
-            async function salvarSessao(e) {
+            const showToast = (msg) => {
+                setToast(msg);
+                setTimeout(() => setToast(null), 3000);
+            };
+
+            // ETAPA 1: CADASTRAR NO CRONOGRAMA
+            async function addAoCronograma(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                const nova = {
+                const novaTarefa = {
                     meta: parseInt(fd.get('meta')),
                     disciplina: fd.get('disciplina'),
-                    tipo: fd.get('tipo'),
                     assunto: fd.get('assunto'),
+                    status: 'pendente'
+                };
+                const { error } = await supabase.from('cronograma').insert([novaTarefa]);
+                if (!error) {
+                    showToast("Tarefa adicionada ao cronograma!");
+                    fetchData();
+                    e.target.reset();
+                }
+            }
+
+            // ETAPA 2: REGISTRAR EXECUÇÃO
+            async function registrarExecucao(e) {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const sessao = {
+                    meta: tarefaSelecionada.meta,
+                    disciplina: tarefaSelecionada.disciplina,
+                    assunto: tarefaSelecionada.assunto,
+                    tipo: fd.get('tipo'),
                     tempo: parseInt(fd.get('tempo')),
                     total: parseInt(fd.get('total') || 0),
                     certas: parseInt(fd.get('certas') || 0)
                 };
-                const { error } = await supabase.from('sessoes').insert([nova]);
-                if (!error) { fetchData(); setAba('dashboard'); }
-            }
-
-            async function excluirSessao(id) {
-                if(confirm("Excluir permanentemente?")) {
-                    const { error } = await supabase.from('sessoes').delete().eq('id', id);
-                    if (!error) fetchData();
+                const { error } = await supabase.from('sessoes').insert([sessao]);
+                if (!error) {
+                    showToast("Estudo registrado com sucesso!");
+                    setTarefaSelecionada(null);
+                    fetchData();
+                    setAba('dashboard');
                 }
             }
-
-            const exportarCSV = () => {
-                const header = "Meta,Disciplina,Tipo,Assunto,Tempo(min),Total_Q,Certas\n";
-                const rows = sessoes.map(s => `${s.meta},${s.disciplina},${s.tipo},${s.assunto},${s.tempo},${s.total},${s.certas}`).join("\n");
-                const blob = new Blob([header + rows], { type: 'text/csv' });
-                window.open(URL.createObjectURL(blob));
-            };
 
             const statsPorMeta = useMemo(() => {
                 const metas = Array.from({ length: 14 }, (_, i) => ({ n: i + 1, min: 0 }));
@@ -82,208 +100,139 @@
                 return metas;
             }, [sessoes]);
 
-            if (loading) return <div className="flex h-screen items-center justify-center font-black text-orange-500 animate-pulse tracking-tighter text-2xl">SALA DO TEMPO...</div>;
+            if (loading) return <div className="flex h-screen items-center justify-center font-black text-orange-500 animate-pulse text-2xl">CARREGANDO DADOS...</div>;
 
             return (
                 <div className="flex min-h-screen">
                     {/* SIDEBAR */}
-                    <aside className="w-20 md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full z-50">
+                    <aside className="w-20 md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full z-40">
                         <div className="p-6 flex items-center gap-3">
-                            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20">
-                                <i className="lucide-flame text-slate-900 w-6 h-6"></i>
-                            </div>
-                            <span className="font-black text-lg hidden md:block tracking-tighter italic">SALA DO TEMPO</span>
+                            <div className="bg-orange-500 p-2 rounded-xl"><i className="lucide-flame text-slate-900"></i></div>
+                            <span className="font-black text-lg hidden md:block italic tracking-tighter">SALA DO TEMPO</span>
                         </div>
-
                         <nav className="flex-1 px-4 space-y-2 mt-4">
-                            <button onClick={() => setAba('dashboard')} 
-                                className={`w-full flex items-center gap-4 p-3 rounded-xl font-bold transition-all ${aba === 'dashboard' ? 'bg-orange-500 text-slate-900 shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                                <i className="lucide-layout-dashboard"></i>
-                                <span className="hidden md:block">Dashboard</span>
+                            <button onClick={() => setAba('dashboard')} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-all ${aba==='dashboard'?'bg-orange-500 text-slate-950 shadow-lg shadow-orange-500/20':'text-slate-400 hover:bg-slate-800'}`}>
+                                <i className="lucide-layout-dashboard"></i> <span className="hidden md:block">Dashboard</span>
                             </button>
-                            
-                            <button onClick={() => setAba('novo')} 
-                                className={`w-full flex items-center gap-4 p-3 rounded-xl font-bold transition-all ${aba === 'novo' ? 'bg-orange-500 text-slate-900 shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                                <i className="lucide-plus-circle"></i>
-                                <span className="hidden md:block">Novo Registro</span>
+                            <button onClick={() => setAba('planejamento')} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-all ${aba==='planejamento'?'bg-orange-500 text-slate-950 shadow-lg shadow-orange-500/20':'text-slate-400 hover:bg-slate-800'}`}>
+                                <i className="lucide-calendar-range"></i> <span className="hidden md:block">Cronograma</span>
                             </button>
-
-                            <button onClick={exportarCSV} 
-                                className="w-full flex items-center gap-4 p-3 rounded-xl font-bold text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
-                                <i className="lucide-download"></i>
-                                <span className="hidden md:block">Exportar</span>
+                            <button onClick={() => setAba('executar')} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-all ${aba==='executar'?'bg-orange-500 text-slate-950 shadow-lg shadow-orange-500/20':'text-slate-400 hover:bg-slate-800'}`}>
+                                <i className="lucide-play-circle"></i> <span className="hidden md:block">Registrar Estudo</span>
                             </button>
                         </nav>
-
-                        <div className="p-4 border-t border-slate-800">
-                            <div className="bg-slate-800/50 p-3 rounded-2xl hidden md:block">
-                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Meta de 14 Semanas</p>
-                                <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
-                                    <div className="bg-orange-500 h-full" style={{width: `${(Math.max(...sessoes.map(s=>s.meta), 0)/14)*100}%`}}></div>
-                                </div>
-                            </div>
-                        </div>
                     </aside>
 
-                    {/* CONTEÚDO PRINCIPAL (DESLOCADO PELA SIDEBAR) */}
-                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10">
-                        {aba === 'dashboard' ? (
+                    {/* MAIN */}
+                    <main className="flex-1 ml-20 md:ml-64 p-6 md:p-12">
+                        {aba === 'dashboard' && (
                             <div className="max-w-5xl mx-auto space-y-8">
-                                <header>
-                                    <h2 className="text-3xl font-black text-white">Bem-vindo, <span className="text-orange-500">Guerreiro.</span></h2>
-                                    <p className="text-slate-500 font-medium">Seu progresso nas 14 semanas está sendo monitorado.</p>
-                                </header>
-
-                                {/* Stats Cards */}
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                    <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500"><i className="lucide-clock"></i></div>
-                                            <span className="text-[10px] font-black text-slate-500 uppercase">Horas Estudadas</span>
-                                        </div>
-                                        <p className="text-4xl font-black">{Math.floor(sessoes.reduce((acc,s)=>acc+s.tempo,0)/60)}<span className="text-lg text-slate-500 ml-1">h</span></p>
+                                <h2 className="text-4xl font-black text-white">Seu <span className="text-orange-500">Progresso</span></h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800">
+                                        <p className="text-xs font-black text-slate-500 uppercase mb-2">Carga Horária</p>
+                                        <p className="text-5xl font-black">{Math.floor(sessoes.reduce((acc,s)=>acc+s.tempo,0)/60)}h</p>
                                     </div>
-                                    <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500"><i className="lucide-target"></i></div>
-                                            <span className="text-[10px] font-black text-slate-500 uppercase">Acerto Geral</span>
-                                        </div>
-                                        <p className="text-4xl font-black text-emerald-400">
-                                            {(() => {
-                                                const t = sessoes.reduce((acc,s)=>acc+s.total,0);
-                                                const c = sessoes.reduce((acc,s)=>acc+s.certas,0);
-                                                return t > 0 ? Math.round((c/t)*100) : 0;
-                                            })()}%
-                                        </p>
+                                    <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800">
+                                        <p className="text-xs font-black text-slate-500 uppercase mb-2">Acertos</p>
+                                        <p className="text-5xl font-black text-emerald-400">{(() => {
+                                            const t = sessoes.reduce((acc,s)=>acc+s.total,0);
+                                            const c = sessoes.reduce((acc,s)=>acc+s.certas,0);
+                                            return t > 0 ? Math.round((c/t)*100) : 0;
+                                        })()}%</p>
                                     </div>
-                                    <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-500"><i className="lucide-layers"></i></div>
-                                            <span className="text-[10px] font-black text-slate-500 uppercase">Meta Atual</span>
-                                        </div>
-                                        <p className="text-4xl font-black text-indigo-400">{sessoes.length > 0 ? Math.max(...sessoes.map(s=>s.meta)) : 1}<span className="text-lg text-slate-500">/14</span></p>
+                                    <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800">
+                                        <p className="text-xs font-black text-slate-500 uppercase mb-2">Tarefas Concluídas</p>
+                                        <p className="text-5xl font-black text-orange-500">{sessoes.length}</p>
                                     </div>
                                 </div>
-
-                                {/* Gráfico de Metas */}
-                                <section className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-xl">
-                                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500 mb-8 italic">Consistência por Semana</h3>
-                                    <div className="flex items-end gap-2 md:gap-4 h-48">
-                                        {statsPorMeta.map(m => (
-                                            <div key={m.n} className="flex-1 flex flex-col items-center gap-3 group">
-                                                <div className="w-full bg-slate-800 rounded-2xl relative flex flex-col justify-end h-full overflow-hidden">
-                                                    <div 
-                                                        className="bg-gradient-to-t from-orange-600 to-orange-400 w-full rounded-t-xl transition-all duration-700 group-hover:brightness-125" 
-                                                        style={{height: `${Math.min((m.min/60)*12, 100)}%`}}
-                                                    ></div>
-                                                </div>
-                                                <span className="text-[10px] font-black text-slate-600 group-hover:text-orange-500 transition-colors uppercase">M{m.n}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
-
-                                {/* Lista de Atividades */}
-                                <section className="bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-xl overflow-hidden">
-                                    <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-                                        <h3 className="font-black text-slate-300 uppercase text-xs tracking-widest italic">Registros Recentes</h3>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left border-collapse">
-                                            <tbody className="divide-y divide-slate-800/50">
-                                                {sessoes.map(s => (
-                                                    <tr key={s.id} className="hover:bg-slate-800/30 transition-colors group">
-                                                        <td className="p-5">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="text-[10px] font-black bg-slate-800 text-orange-500 w-10 h-10 rounded-full flex items-center justify-center border border-slate-700">M{s.meta}</div>
-                                                                <div>
-                                                                    <p className="font-bold text-slate-200">{s.disciplina}</p>
-                                                                    <p className="text-xs text-slate-500">{s.assunto}</p>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="p-5 text-right">
-                                                            <div className="inline-block px-3 py-1 bg-slate-800 rounded-lg text-xs font-bold text-slate-400">{s.tempo} min</div>
-                                                        </td>
-                                                        <td className="p-5 text-right">
-                                                            {s.total > 0 && (
-                                                                <span className={`font-black ${Math.round((s.certas/s.total)*100) >= 75 ? 'text-emerald-500' : 'text-orange-500'}`}>
-                                                                    {Math.round((s.certas/s.total)*100)}%
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-5 text-right">
-                                                            <button onClick={() => excluirSessao(s.id)} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-500 transition-all">
-                                                                <i className="lucide-trash-2 w-5 h-5"></i>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </section>
-                            </div>
-                        ) : (
-                            <div className="max-w-2xl mx-auto py-10">
-                                <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-2xl relative overflow-hidden">
-                                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl"></div>
-                                    <h2 className="text-3xl font-black mb-8 flex items-center gap-4">
-                                        <span className="p-3 bg-orange-500 rounded-2xl text-slate-900"><i className="lucide-edit-3"></i></span>
-                                        Registrar Estudo
-                                    </h2>
-
-                                    <form onSubmit={salvarSessao} className="space-y-6 relative z-10">
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">Qual Meta?</label>
-                                                <select name="meta" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all text-orange-500">
-                                                    {Array.from({length:14}, (_,i)=><option key={i+1} value={i+1}>Semana {i+1}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">Tipo de Atividade</label>
-                                                <select name="tipo" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all">
-                                                    {CATEGORIAS.map(c=><option key={c}>{c}</option>)}
-                                                </select>
-                                            </div>
+                                <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 h-64 flex items-end gap-3">
+                                    {statsPorMeta.map(m => (
+                                        <div key={m.n} className="flex-1 bg-slate-800 rounded-xl relative flex flex-col justify-end h-full overflow-hidden group">
+                                            <div className="bg-orange-500 w-full transition-all duration-500 group-hover:brightness-125" style={{height: `${Math.min((m.min/60)*10, 100)}%`}}></div>
+                                            <span className="absolute bottom-2 left-0 right-0 text-[8px] font-black text-center text-slate-400">M{m.n}</span>
                                         </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">Disciplina</label>
-                                            <select name="disciplina" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all">
-                                                {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
-                                            </select>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">O que você estudou hoje?</label>
-                                            <input name="assunto" required placeholder="Ex: Atos Administrativos" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all placeholder:text-slate-700" />
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div className="space-y-2 text-center">
-                                                <label className="text-[10px] font-black uppercase text-slate-500">Minutos</label>
-                                                <input name="tempo" type="number" required placeholder="0" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold text-center" />
-                                            </div>
-                                            <div className="space-y-2 text-center">
-                                                <label className="text-[10px] font-black uppercase text-slate-500">Questões</label>
-                                                <input name="total" type="number" placeholder="0" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold text-center" />
-                                            </div>
-                                            <div className="space-y-2 text-center">
-                                                <label className="text-[10px] font-black uppercase text-slate-500">Certas</label>
-                                                <input name="certas" type="number" placeholder="0" className="w-full bg-slate-950 p-4 rounded-2xl border border-emerald-900 focus:border-emerald-500 outline-none font-bold text-center text-emerald-500" />
-                                            </div>
-                                        </div>
-
-                                        <button type="submit" className="w-full bg-orange-500 text-slate-950 py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all">
-                                            SALVAR SESSÃO NO CLOUD
-                                        </button>
-                                    </form>
+                                    ))}
                                 </div>
                             </div>
                         )}
+
+                        {aba === 'planejamento' && (
+                            <div className="max-w-3xl mx-auto space-y-8">
+                                <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800">
+                                    <h2 className="text-2xl font-black mb-6 flex items-center gap-3"><i className="lucide-calendar text-orange-500"></i> Montar Cronograma</h2>
+                                    <form onSubmit={addAoCronograma} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <select name="meta" className="bg-slate-950 p-4 rounded-2xl border border-slate-800 outline-none font-bold text-orange-500">
+                                            {Array.from({length:14}, (_,i)=><option value={i+1}>Meta {i+1}</option>)}
+                                        </select>
+                                        <select name="disciplina" className="bg-slate-950 p-4 rounded-2xl border border-slate-800 outline-none font-bold">
+                                            {DISCIPLINAS.map(d=><option key={d} value={d}>{d}</option>)}
+                                        </select>
+                                        <input name="assunto" required placeholder="O que vai estudar?" className="md:col-span-2 bg-slate-950 p-4 rounded-2xl border border-slate-800 outline-none font-bold" />
+                                        <button className="md:col-span-2 bg-orange-500 text-slate-950 py-4 rounded-2xl font-black hover:scale-[1.02] transition-all">ADICIONAR AO PLANO</button>
+                                    </form>
+                                </div>
+                                <div className="space-y-4">
+                                    <h3 className="font-black text-slate-500 uppercase text-xs tracking-widest">Suas Tarefas Planejadas</h3>
+                                    {plano.map(t => (
+                                        <div key={t.id} className="bg-slate-900/50 p-5 rounded-2xl border border-slate-800 flex justify-between items-center">
+                                            <div>
+                                                <span className="text-[10px] bg-slate-800 text-orange-500 px-2 py-1 rounded-lg font-black mr-3">META {t.meta}</span>
+                                                <span className="font-bold text-slate-200">{t.disciplina}</span>
+                                                <p className="text-sm text-slate-500 mt-1">{t.assunto}</p>
+                                            </div>
+                                            <i className="lucide-circle text-slate-700"></i>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {aba === 'executar' && (
+                            <div className="max-w-4xl mx-auto space-y-6">
+                                {!tarefaSelecionada ? (
+                                    <div className="space-y-4">
+                                        <h2 className="text-2xl font-black">Selecione uma tarefa para <span className="text-orange-500">Executar</span></h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {plano.map(t => (
+                                                <button key={t.id} onClick={() => setTarefaSelecionada(t)} className="text-left bg-slate-900 p-6 rounded-3xl border border-slate-800 hover:border-orange-500 transition-all group">
+                                                    <span className="text-[10px] font-black text-orange-500 uppercase">Meta {t.meta}</span>
+                                                    <h4 className="font-black text-xl text-white group-hover:text-orange-500">{t.disciplina}</h4>
+                                                    <p className="text-slate-500 text-sm mt-1">{t.assunto}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="bg-slate-900 p-10 rounded-[3rem] border border-orange-500/30">
+                                        <button onClick={() => setTarefaSelecionada(null)} className="text-slate-500 mb-6 hover:text-white flex items-center gap-2"><i className="lucide-arrow-left"></i> Voltar</button>
+                                        <h2 className="text-3xl font-black mb-2">{tarefaSelecionada.disciplina}</h2>
+                                        <p className="text-orange-500 font-bold mb-8 italic">{tarefaSelecionada.assunto}</p>
+                                        <form onSubmit={registrarExecucao} className="space-y-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <select name="tipo" className="bg-slate-950 p-4 rounded-2xl border border-slate-800 outline-none font-bold">
+                                                    <option>Teoria</option><option>Questões</option><option>Revisão</option><option>Simulado</option>
+                                                </select>
+                                                <input name="tempo" type="number" required placeholder="Minutos Gastos" className="bg-slate-950 p-4 rounded-2xl border border-slate-800 outline-none font-bold" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="total" type="number" placeholder="Total Questões" className="bg-slate-950 p-4 rounded-2xl border border-slate-800 outline-none font-bold" />
+                                                <input name="certas" type="number" placeholder="Certas" className="bg-slate-950 p-4 rounded-2xl border border-emerald-900 outline-none font-bold text-emerald-400" />
+                                            </div>
+                                            <button className="w-full bg-orange-500 text-slate-950 py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-500/20">SALVAR REGISTRO</button>
+                                        </form>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </main>
+
+                    {/* TOAST NOTIFICATION */}
+                    {toast && (
+                        <div className="fixed bottom-10 right-10 bg-emerald-500 text-slate-950 px-8 py-4 rounded-2xl font-black shadow-2xl z-50 toast-enter flex items-center gap-3">
+                            <i className="lucide-check-circle"></i> {toast}
+                        </div>
+                    )}
                 </div>
             );
         }
