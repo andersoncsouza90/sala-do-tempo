@@ -2,251 +2,100 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sala do Tempo - Restore</title>
+    <title>Sala do Tempo - Emergency Fix</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f1a; color: white; margin: 0; }
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        .animate-pop { animation: pop 0.3s ease-out; }
-        @keyframes pop { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-    </style>
 </head>
-<body>
+<body class="bg-[#0b0f1a] text-white">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
+        const { useState, useEffect } = React;
 
+        // Configuração Supabase
         const SUPABASE_URL = 'https://sflzuzorlmddprbkdczv.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3viV5YSChpIMXYHAz-e-5g_GzP1d0E8';
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        const DISCIPLINAS = ["Português", "Matemática Financeira", "Estatística", "Direito Tributário", "LTE", "Contabilidade Geral", "Contabilidade de Custos", "Auditoria", "TI", "Direito Constitucional", "Direito Administrativo", "Direito Civil", "Direito Empresarial", "Direito Penal", "Administração Geral e Pública"];
-
         function App() {
-            const [plano, setPlano] = useState([]);
-            const [sessoes, setSessoes] = useState([]);
             const [aba, setAba] = useState('dashboard');
+            const [plano, setPlano] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [tarefaParaExecutar, setTarefaParaExecutar] = useState(null);
-            const [editando, setEditando] = useState(null);
-            const [toast, setToast] = useState(null);
+            const [erro, setErro] = useState(null);
 
-            useEffect(() => { fetchData(); }, []);
-
-            async function fetchData() {
-                try {
-                    const { data: cron, error: err1 } = await supabase.from('cronograma').select('*').order('meta', { ascending: true });
-                    const { data: sess, error: err2 } = await supabase.from('sessoes').select('*');
-                    
-                    if (err1) console.error("Erro Cronograma:", err1);
-                    if (err2) console.error("Erro Sessões:", err2);
-
-                    setPlano(cron || []);
-                    setSessoes(sess || []);
-                } catch (e) {
-                    console.error("Falha na conexão:", e);
-                } finally {
-                    setLoading(false);
+            useEffect(() => {
+                async function load() {
+                    try {
+                        const { data, error } = await supabase.from('cronograma').select('*');
+                        if (error) throw error;
+                        setPlano(data || []);
+                    } catch (e) {
+                        setErro(e.message);
+                    } finally {
+                        setLoading(false);
+                    }
                 }
-            }
+                load();
+            }, []);
 
-            const showToast = (msg) => {
-                setToast(msg);
-                setTimeout(() => setToast(null), 3000);
-            };
-
-            async function handlePlano(e) {
-                e.preventDefault();
-                const fd = new FormData(e.target);
-                const dados = {
-                    meta: parseInt(fd.get('meta')),
-                    disciplina: fd.get('disciplina'),
-                    assunto: fd.get('assunto'),
-                    tipo: fd.get('tipo')
-                };
-
-                const res = editando 
-                    ? await supabase.from('cronograma').update(dados).eq('id', editando.id)
-                    : await supabase.from('cronograma').insert([dados]);
-
-                if (!res.error) {
-                    showToast(editando ? "Atualizado!" : "Criado!");
-                    setEditando(null);
-                    fetchData();
-                    e.target.reset();
-                }
-            }
-
-            async function handleExecucao(e) {
-                e.preventDefault();
-                const fd = new FormData(e.target);
-                const registro = {
-                    cronograma_id: tarefaParaExecutar.id,
-                    meta: tarefaParaExecutar.meta,
-                    disciplina: tarefaParaExecutar.disciplina,
-                    assunto: tarefaParaExecutar.assunto,
-                    tempo: parseInt(fd.get('tempo')),
-                    total: parseInt(fd.get('total') || 0),
-                    certas: parseInt(fd.get('certas') || 0)
-                };
-
-                const { error } = await supabase.from('sessoes').insert([registro]);
-                if (!error) {
-                    showToast("Estudo registrado!");
-                    setTarefaParaExecutar(null);
-                    fetchData();
-                    setAba('dashboard');
-                } else {
-                    alert("Erro ao salvar. Verifique se a coluna cronograma_id existe.");
-                }
-            }
-
-            const dadosGrafico = useMemo(() => {
-                const map = {};
-                for(let i=1; i<=14; i++) map[i] = { name: `M${i}`, horas: 0 };
-                sessoes.forEach(s => {
-                    if(map[s.meta]) map[s.meta].horas += (s.tempo / 60);
-                });
-                return Object.values(map);
-            }, [sessoes]);
-
-            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black">SALA DO TEMPO...</div>;
+            if (loading) return <div className="flex h-screen items-center justify-center">Carregando...</div>;
 
             return (
                 <div className="flex min-h-screen">
-                    {/* SIDEBAR FIXA */}
-                    <aside className="w-20 md:w-64 bg-[#111827] border-r border-slate-800 fixed h-full z-40">
-                        <div className="p-8 font-black text-orange-500 italic text-xl hidden md:block uppercase tracking-tighter">Sala do Tempo</div>
-                        <nav className="p-4 space-y-4">
-                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all ${aba==='dashboard'?'bg-orange-500 text-white shadow-lg shadow-orange-500/20':'text-slate-500 hover:text-slate-300'}`}>
-                                <i className="lucide-layout-grid"></i> <span className="hidden md:block font-bold">Dashboard</span>
-                            </button>
-                            <button onClick={()=>setAba('planejamento')} className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all ${aba==='planejamento'?'bg-orange-500 text-white shadow-lg shadow-orange-500/20':'text-slate-500 hover:text-slate-300'}`}>
-                                <i className="lucide-calendar-plus"></i> <span className="hidden md:block font-bold">Planejar</span>
-                            </button>
+                    {/* Sidebar Simples */}
+                    <aside className="w-64 bg-slate-900 p-6 border-r border-slate-800">
+                        <h1 className="text-orange-500 font-black text-xl mb-10 italic">SALA DO TEMPO</h1>
+                        <nav className="space-y-4">
+                            <button onClick={() => setAba('dashboard')} className={`w-full text-left p-3 rounded ${aba === 'dashboard' ? 'bg-orange-500' : 'text-slate-400'}`}>Dashboard</button>
+                            <button onClick={() => setAba('planejar')} className={`w-full text-left p-3 rounded ${aba === 'planejar' ? 'bg-orange-500' : 'text-slate-400'}`}>Planejar</button>
                         </nav>
+                        {erro && <div className="mt-10 text-xs text-red-500 bg-red-500/10 p-2 rounded">Erro: {erro}</div>}
                     </aside>
 
-                    {/* MAIN CONTENT */}
-                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10">
+                    {/* Conteúdo */}
+                    <main className="flex-1 p-10">
                         {aba === 'dashboard' ? (
-                            <div className="max-w-6xl mx-auto space-y-8 animate-pop">
-                                <h2 className="text-3xl font-black">Seu <span className="text-orange-500">Desempenho</span></h2>
-                                
-                                <div className="bg-[#111827] p-6 rounded-[2rem] border border-slate-800 h-64 shadow-xl">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={dadosGrafico}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                            <XAxis dataKey="name" stroke="#475569" fontSize={10} />
-                                            <YAxis stroke="#475569" fontSize={10} />
-                                            <Tooltip contentStyle={{backgroundColor: '#0b0f1a', borderRadius: '12px'}} />
-                                            <Area type="monotone" dataKey="horas" stroke="#f97316" fill="#f97316" fillOpacity={0.1} strokeWidth={3} />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-
-                                <div className="bg-[#111827] rounded-[2rem] border border-slate-800 overflow-hidden shadow-2xl">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left">
-                                            <thead className="bg-slate-900/50 text-[10px] uppercase text-slate-500 font-black">
-                                                <tr>
-                                                    <th className="p-6">Meta</th>
-                                                    <th className="p-6">Disciplina / Assunto</th>
-                                                    <th className="p-6 text-center">Horas</th>
-                                                    <th className="p-6 text-center">Questões (%)</th>
-                                                    <th className="p-6 text-right">Ação</th>
+                            <div>
+                                <h2 className="text-3xl font-black mb-6">Dashboard</h2>
+                                <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="text-slate-500 text-xs uppercase text-left">
+                                                <th className="p-3">Meta</th>
+                                                <th className="p-3">Disciplina</th>
+                                                <th className="p-3">Assunto</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {plano.map(item => (
+                                                <tr key={item.id} className="border-t border-slate-800">
+                                                    <td className="p-3 text-orange-500 font-bold">{item.meta}</td>
+                                                    <td className="p-3">{item.disciplina}</td>
+                                                    <td className="p-3">{item.assunto}</td>
                                                 </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-800/50">
-                                                {plano.length === 0 ? (
-                                                    <tr><td colSpan="5" className="p-10 text-center text-slate-600 font-bold italic">Nenhuma tarefa planejada. Vá em "Planejar".</td></tr>
-                                                ) : plano.map(p => {
-                                                    const exec = sessoes.filter(s => s.cronograma_id === p.id);
-                                                    const tempoTotal = exec.reduce((a,b)=>a+b.tempo, 0);
-                                                    const qTotal = exec.reduce((a,b)=>a+b.total, 0);
-                                                    const qCertas = exec.reduce((a,b)=>a+b.certas, 0);
-                                                    const perc = qTotal > 0 ? Math.round((qCertas/qTotal)*100) : 0;
-
-                                                    return (
-                                                        <tr key={p.id} className="hover:bg-slate-800/20 transition-all group">
-                                                            <td className="p-6 font-black text-orange-500">M{p.meta}</td>
-                                                            <td className="p-6">
-                                                                <div className="font-bold text-slate-200">{p.disciplina}</div>
-                                                                <div className="text-xs text-slate-500">{p.assunto}</div>
-                                                            </td>
-                                                            <td className="p-6 text-center font-mono text-sm">{Math.round(tempoTotal/60 * 10)/10}h</td>
-                                                            <td className="p-6 text-center">
-                                                                <div className={`text-lg font-black ${perc >= 70 ? 'text-emerald-500' : 'text-orange-500'}`}>{qTotal > 0 ? `${perc}%` : '--'}</div>
-                                                                <div className="text-[10px] text-slate-600 uppercase font-bold">{qTotal} Qs</div>
-                                                            </td>
-                                                            <td className="p-6 text-right">
-                                                                <button onClick={()=>setTarefaParaExecutar(p)} className="p-3 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all">
-                                                                    <i className="lucide-play w-4 h-4 fill-current"></i>
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    {plano.length === 0 && <p className="p-10 text-center text-slate-500">Nenhuma tarefa encontrada.</p>}
                                 </div>
                             </div>
                         ) : (
-                            <div className="max-w-3xl mx-auto space-y-8 animate-pop">
-                                <div className="bg-[#111827] p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl">
-                                    <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
-                                        <i className="lucide-calendar-plus text-orange-500"></i> {editando ? 'Editar Plano' : 'Montar Cronograma'}
-                                    </h2>
-                                    <form onSubmit={handlePlano} className="grid grid-cols-2 gap-4">
-                                        <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Meta #" className="bg-[#0b0f1a] p-4 rounded-xl border border-slate-800 outline-none font-bold" required />
-                                        <select name="tipo" defaultValue={editando?.tipo} className="bg-[#0b0f1a] p-4 rounded-xl border border-slate-800 outline-none font-bold">
-                                            <option>Teoria</option><option>Questões</option><option>Revisão</option>
-                                        </select>
-                                        <select name="disciplina" defaultValue={editando?.disciplina} className="col-span-2 bg-[#0b0f1a] p-4 rounded-xl border border-slate-800 outline-none font-bold">
-                                            {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
-                                        </select>
-                                        <input name="assunto" defaultValue={editando?.assunto} placeholder="Qual assunto?" className="col-span-2 bg-[#0b0f1a] p-4 rounded-xl border border-slate-800 outline-none font-bold" required />
-                                        <button className="col-span-2 bg-orange-500 py-4 rounded-xl font-black shadow-lg shadow-orange-500/20">{editando ? 'ATUALIZAR' : 'CADASTRAR'}</button>
-                                        {editando && <button type="button" onClick={()=>setEditando(null)} className="col-span-2 bg-slate-800 py-2 rounded-xl text-xs font-bold">CANCELAR EDIÇÃO</button>}
-                                    </form>
-                                </div>
-                                <div className="space-y-3">
-                                    {plano.map(t => (
-                                        <div key={t.id} className="bg-[#111827] p-4 rounded-2xl border border-slate-800 flex justify-between items-center">
-                                            <div>
-                                                <span className="text-[10px] font-black text-orange-500">M{t.meta} - {t.disciplina}</span>
-                                                <p className="font-bold text-slate-300">{t.assunto}</p>
-                                            </div>
-                                            <button onClick={()=>setEditando(t)} className="text-slate-600 hover:text-orange-500"><i className="lucide-pencil w-4 h-4"></i></button>
-                                        </div>
-                                    ))}
-                                </div>
+                            <div>
+                                <h2 className="text-3xl font-black mb-6">Novo Planejamento</h2>
+                                <p className="text-slate-400">Aqui irá o formulário...</p>
                             </div>
                         )}
                     </main>
+                </div>
+            );
+        }
 
-                    {/* MODAL DE REGISTRO */}
-                    {tarefaParaExecutar && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-[#111827] w-full max-w-sm p-8 rounded-[2.5rem] border border-orange-500/30 animate-pop">
-                                <h3 className="text-xl font-black mb-1">{tarefaParaExecutar.disciplina}</h3>
-                                <p className="text-orange-500 text-sm font-bold italic mb-6">{tarefaParaExecutar.assunto}</p>
-                                <form onSubmit={handleExecucao} className="space-y-4">
-                                    <input name="tempo" type="number" placeholder="Minutos" className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-slate-800 font-bold" required />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input name="total" type="number" placeholder="Questões" className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-slate-800 font-bold" />
-                                        <input name="certas" type="number" placeholder="Certas" className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-emerald-900 font-bold text-emerald-500" />
-                                    </div>
-                                    <button className="w-full bg-orange-500 py-4 rounded-xl font-black shadow-lg">SALVAR EST
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
