@@ -2,94 +2,225 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Sala do Tempo - Emergency Fix</title>
+    <title>Sala do Tempo - Oficial</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f1a; color: white; margin: 0; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
 </head>
-<body class="bg-[#0b0f1a] text-white">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
+        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } = Recharts;
 
-        // Configuração Supabase
         const SUPABASE_URL = 'https://sflzuzorlmddprbkdczv.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3viV5YSChpIMXYHAz-e-5g_GzP1d0E8';
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        const DISCIPLINAS = ["Português", "Matemática Financeira", "Estatística", "Direito Tributário", "LTE", "Contabilidade Geral", "Contabilidade de Custos", "Auditoria", "TI", "Direito Constitucional", "Direito Administrativo", "Direito Civil", "Direito Empresarial", "Direito Penal", "Administração Geral e Pública"];
+
         function App() {
             const [aba, setAba] = useState('dashboard');
             const [plano, setPlano] = useState([]);
+            const [sessoes, setSessoes] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [erro, setErro] = useState(null);
+            const [tarefaParaExecutar, setTarefaParaExecutar] = useState(null);
+            const [editando, setEditando] = useState(null);
 
-            useEffect(() => {
-                async function load() {
-                    try {
-                        const { data, error } = await supabase.from('cronograma').select('*');
-                        if (error) throw error;
-                        setPlano(data || []);
-                    } catch (e) {
-                        setErro(e.message);
-                    } finally {
-                        setLoading(false);
-                    }
+            useEffect(() => { fetchData(); }, []);
+
+            async function fetchData() {
+                try {
+                    const { data: cron } = await supabase.from('cronograma').select('*').order('meta', { ascending: true });
+                    const { data: sess } = await supabase.from('sessoes').select('*');
+                    setPlano(cron || []);
+                    setSessoes(sess || []);
+                } catch (e) { console.error(e); }
+                finally { setLoading(false); }
+            }
+
+            async function salvarTarefa(e) {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const dados = {
+                    meta: parseInt(fd.get('meta')),
+                    disciplina: fd.get('disciplina'),
+                    assunto: fd.get('assunto'),
+                    tipo: fd.get('tipo')
+                };
+                const res = editando 
+                    ? await supabase.from('cronograma').update(dados).eq('id', editando.id)
+                    : await supabase.from('cronograma').insert([dados]);
+                
+                if (!res.error) {
+                    setEditando(null);
+                    fetchData();
+                    e.target.reset();
                 }
-                load();
-            }, []);
+            }
 
-            if (loading) return <div className="flex h-screen items-center justify-center">Carregando...</div>;
+            async function registrarDesempenho(e) {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const registro = {
+                    cronograma_id: tarefaParaExecutar.id,
+                    meta: tarefaParaExecutar.meta,
+                    disciplina: tarefaParaExecutar.disciplina,
+                    assunto: tarefaParaExecutar.assunto,
+                    tempo: parseInt(fd.get('tempo')),
+                    total: parseInt(fd.get('total') || 0),
+                    certas: parseInt(fd.get('certas') || 0)
+                };
+                const { error } = await supabase.from('sessoes').insert([registro]);
+                if (!error) {
+                    setTarefaParaExecutar(null);
+                    fetchData();
+                } else {
+                    alert("Erro ao salvar! Verifique se a coluna 'cronograma_id' existe na tabela 'sessoes'.");
+                }
+            }
+
+            const dadosGrafico = useMemo(() => {
+                const map = {};
+                for(let i=1; i<=14; i++) map[i] = { name: `M${i}`, horas: 0 };
+                sessoes.forEach(s => {
+                    if(map[s.meta]) map[s.meta].horas += (s.tempo / 60);
+                });
+                return Object.values(map);
+            }, [sessoes]);
+
+            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black">CARREGANDO...</div>;
 
             return (
                 <div className="flex min-h-screen">
-                    {/* Sidebar Simples */}
-                    <aside className="w-64 bg-slate-900 p-6 border-r border-slate-800">
-                        <h1 className="text-orange-500 font-black text-xl mb-10 italic">SALA DO TEMPO</h1>
-                        <nav className="space-y-4">
-                            <button onClick={() => setAba('dashboard')} className={`w-full text-left p-3 rounded ${aba === 'dashboard' ? 'bg-orange-500' : 'text-slate-400'}`}>Dashboard</button>
-                            <button onClick={() => setAba('planejar')} className={`w-full text-left p-3 rounded ${aba === 'planejar' ? 'bg-orange-500' : 'text-slate-400'}`}>Planejar</button>
+                    {/* SIDEBAR */}
+                    <aside className="w-20 md:w-64 bg-[#111827] border-r border-slate-800 fixed h-full z-40">
+                        <div className="p-8 text-orange-500 font-black italic hidden md:block">SALA DO TEMPO</div>
+                        <nav className="p-4 space-y-4">
+                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='dashboard'?'bg-orange-500':'text-slate-500'}`}>
+                                <i className="lucide-layout-grid"></i> <span className="hidden md:block font-bold">Dashboard</span>
+                            </button>
+                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='planejar'?'bg-orange-500':'text-slate-500'}`}>
+                                <i className="lucide-calendar"></i> <span className="hidden md:block font-bold">Cronograma</span>
+                            </button>
                         </nav>
-                        {erro && <div className="mt-10 text-xs text-red-500 bg-red-500/10 p-2 rounded">Erro: {erro}</div>}
                     </aside>
 
-                    {/* Conteúdo */}
-                    <main className="flex-1 p-10">
+                    <main className="flex-1 ml-20 md:ml-64 p-6 md:p-10">
                         {aba === 'dashboard' ? (
-                            <div>
-                                <h2 className="text-3xl font-black mb-6">Dashboard</h2>
-                                <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="text-slate-500 text-xs uppercase text-left">
-                                                <th className="p-3">Meta</th>
-                                                <th className="p-3">Disciplina</th>
-                                                <th className="p-3">Assunto</th>
+                            <div className="max-w-6xl mx-auto space-y-8">
+                                <h2 className="text-3xl font-black italic">PAINEL DE <span className="text-orange-500">CONTROLE</span></h2>
+                                
+                                {/* GRÁFICO */}
+                                <div className="bg-[#111827] p-6 rounded-3xl border border-slate-800 h-64">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={dadosGrafico}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                            <XAxis dataKey="name" stroke="#475569" fontSize={10} />
+                                            <YAxis stroke="#475569" fontSize={10} />
+                                            <Tooltip contentStyle={{backgroundColor: '#0b0f1a', borderRadius: '10px', border: 'none'}} />
+                                            <Area type="monotone" dataKey="horas" stroke="#f97316" fill="#f97316" fillOpacity={0.1} strokeWidth={3} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* TABELA DASHBOARD */}
+                                <div className="bg-[#111827] rounded-3xl border border-slate-800 overflow-hidden">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-900/50 text-[10px] uppercase text-slate-500 font-black">
+                                            <tr>
+                                                <th className="p-5">Meta</th>
+                                                <th className="p-5">Tarefa</th>
+                                                <th className="p-5 text-center">Tempo</th>
+                                                <th className="p-5 text-center">Desempenho</th>
+                                                <th className="p-5 text-right">Registrar</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
-                                            {plano.map(item => (
-                                                <tr key={item.id} className="border-t border-slate-800">
-                                                    <td className="p-3 text-orange-500 font-bold">{item.meta}</td>
-                                                    <td className="p-3">{item.disciplina}</td>
-                                                    <td className="p-3">{item.assunto}</td>
-                                                </tr>
-                                            ))}
+                                        <tbody className="divide-y divide-slate-800/50">
+                                            {plano.map(p => {
+                                                const exec = sessoes.filter(s => s.cronograma_id === p.id);
+                                                const tempo = exec.reduce((a,b)=>a+b.tempo, 0);
+                                                const qT = exec.reduce((a,b)=>a+b.total, 0);
+                                                const qC = exec.reduce((a,b)=>a+b.certas, 0);
+                                                const perc = qT > 0 ? Math.round((qC/qT)*100) : 0;
+
+                                                return (
+                                                    <tr key={p.id} className="hover:bg-slate-800/20">
+                                                        <td className="p-5 font-black text-orange-500">M{p.meta}</td>
+                                                        <td className="p-5">
+                                                            <div className="font-bold">{p.disciplina}</div>
+                                                            <div className="text-xs text-slate-500">{p.assunto}</div>
+                                                        </td>
+                                                        <td className="p-5 text-center font-mono text-sm">{tempo}m</td>
+                                                        <td className="p-5 text-center">
+                                                            <div className={`text-lg font-black ${perc >= 70 ? 'text-emerald-500' : 'text-orange-500'}`}>{qT > 0 ? `${perc}%` : '--'}</div>
+                                                            <div className="text-[10px] text-slate-600 font-bold">{qT} Qs</div>
+                                                        </td>
+                                                        <td className="p-5 text-right">
+                                                            <button onClick={()=>setTarefaParaExecutar(p)} className="p-2 bg-orange-500 rounded-lg"><i className="lucide-play w-4 h-4"></i></button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
-                                    {plano.length === 0 && <p className="p-10 text-center text-slate-500">Nenhuma tarefa encontrada.</p>}
                                 </div>
                             </div>
                         ) : (
-                            <div>
-                                <h2 className="text-3xl font-black mb-6">Novo Planejamento</h2>
-                                <p className="text-slate-400">Aqui irá o formulário...</p>
+                            <div className="max-w-2xl mx-auto space-y-6">
+                                <h2 className="text-3xl font-black">Planejar <span className="text-orange-500">Ciclo</span></h2>
+                                <form onSubmit={salvarTarefa} className="bg-[#111827] p-8 rounded-3xl border border-slate-800 grid grid-cols-2 gap-4">
+                                    <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Meta #" className="bg-slate-950 p-4 rounded-xl border border-slate-800" required />
+                                    <select name="tipo" defaultValue={editando?.tipo} className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                        <option>Teoria</option><option>Questões</option><option>Revisão</option>
+                                    </select>
+                                    <select name="disciplina" defaultValue={editando?.disciplina} className="col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                        {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
+                                    </select>
+                                    <input name="assunto" defaultValue={editando?.assunto} placeholder="Assunto" className="col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-800" required />
+                                    <button className="col-span-2 bg-orange-500 py-4 rounded-xl font-black">{editando ? 'ATUALIZAR' : 'CADASTRAR TAREFA'}</button>
+                                </form>
+                                <div className="space-y-2">
+                                    {plano.map(t => (
+                                        <div key={t.id} className="bg-[#111827] p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                                            <span className="text-sm">M{t.meta} - <b>{t.disciplina}</b></span>
+                                            <button onClick={()=>setEditando(t)} className="text-slate-500 hover:text-orange-500"><i className="lucide-pencil w-4 h-4"></i></button>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </main>
+
+                    {/* MODAL REGISTRO */}
+                    {tarefaParaExecutar && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-[#111827] w-full max-w-sm p-8 rounded-[2rem] border border-orange-500/30">
+                                <h3 className="text-xl font-black mb-1">{tarefaParaExecutar.disciplina}</h3>
+                                <p className="text-orange-500 text-xs font-bold mb-6 italic">{tarefaParaExecutar.assunto}</p>
+                                <form onSubmit={registrarDesempenho} className="space-y-4">
+                                    <input name="tempo" type="number" placeholder="Minutos" className="w-full bg-slate-950 p-4 rounded-xl border border-slate-800" required />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <input name="total" type="number" placeholder="Questões" className="w-full bg-slate-950 p-4 rounded-xl border border-slate-800" />
+                                        <input name="certas" type="number" placeholder="Certas" className="w-full bg-slate-950 p-4 rounded-xl border border-emerald-900 text-emerald-500" />
+                                    </div>
+                                    <button className="w-full bg-orange-500 py-4 rounded-xl font-black">SALVAR</button>
+                                    <button type="button" onClick={()=>setTarefaParaExecutar(null)} className="w-full text-slate-500 text-xs font-bold uppercase py-2">Cancelar</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
