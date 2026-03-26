@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sala do Tempo - Dark Mode</title>
+    <title>Sala do Tempo - Sidebar Edition</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -11,20 +11,20 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
     <style>
-        /* Ajuste para o scrollbar no modo escuro ficar bonito */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 font-sans antialiased selection:bg-orange-500 selection:text-white">
+<body class="bg-slate-950 text-slate-100 antialiased">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- SUAS CREDENCIAIS DO SUPABASE ---
+        // --- CREDENCIAIS ---
         const SUPABASE_URL = 'https://sflzuzorlmddprbkdczv.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3viV5YSChpIMXYHAz-e-5g_GzP1d0E8';
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -37,17 +37,11 @@
             const [aba, setAba] = useState('dashboard');
             const [loading, setLoading] = useState(true);
 
-            useEffect(() => {
-                fetchData();
-            }, []);
+            useEffect(() => { fetchData(); }, []);
 
             async function fetchData() {
                 setLoading(true);
-                const { data, error } = await supabase
-                    .from('sessoes')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
+                const { data } = await supabase.from('sessoes').select('*').order('created_at', { ascending: false });
                 if (data) setSessoes(data);
                 setLoading(false);
             }
@@ -55,7 +49,7 @@
             async function salvarSessao(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                const novaSessao = {
+                const nova = {
                     meta: parseInt(fd.get('meta')),
                     disciplina: fd.get('disciplina'),
                     tipo: fd.get('tipo'),
@@ -64,18 +58,12 @@
                     total: parseInt(fd.get('total') || 0),
                     certas: parseInt(fd.get('certas') || 0)
                 };
-
-                const { error } = await supabase.from('sessoes').insert([novaSessao]);
-                if (!error) {
-                    fetchData(); 
-                    setAba('dashboard');
-                } else {
-                    alert("Erro ao salvar no banco!");
-                }
+                const { error } = await supabase.from('sessoes').insert([nova]);
+                if (!error) { fetchData(); setAba('dashboard'); }
             }
 
             async function excluirSessao(id) {
-                if(confirm("Apagar registro do banco de dados permanentemente?")) {
+                if(confirm("Excluir permanentemente?")) {
                     const { error } = await supabase.from('sessoes').delete().eq('id', id);
                     if (!error) fetchData();
                 }
@@ -85,11 +73,7 @@
                 const header = "Meta,Disciplina,Tipo,Assunto,Tempo(min),Total_Q,Certas\n";
                 const rows = sessoes.map(s => `${s.meta},${s.disciplina},${s.tipo},${s.assunto},${s.tempo},${s.total},${s.certas}`).join("\n");
                 const blob = new Blob([header + rows], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `SALA_DO_TEMPO_BACKUP.csv`;
-                a.click();
+                window.open(URL.createObjectURL(blob));
             };
 
             const statsPorMeta = useMemo(() => {
@@ -98,44 +82,73 @@
                 return metas;
             }, [sessoes]);
 
-            if (loading) return <div className="flex h-screen items-center justify-center font-bold text-orange-500 text-xl tracking-widest animate-pulse">CARREGANDO...</div>;
+            if (loading) return <div className="flex h-screen items-center justify-center font-black text-orange-500 animate-pulse tracking-tighter text-2xl">SALA DO TEMPO...</div>;
 
             return (
-                <div className="min-h-screen">
-                    {/* Topbar Laranja */}
-                    <nav className="bg-orange-600 text-white p-4 shadow-xl shadow-orange-900/20 sticky top-0 z-50">
-                        <div className="max-w-5xl mx-auto flex justify-between items-center">
-                            <h1 className="font-black text-xl tracking-tighter italic flex items-center gap-2">
-                                <i className="lucide-flame"></i> SALA DO TEMPO 
-                                <span className="text-[10px] bg-orange-800/50 px-2 py-1 rounded ml-1 tracking-wider">PRO</span>
-                            </h1>
-                            <div className="flex gap-2">
-                                <button onClick={() => setAba('dashboard')} className={`p-2 rounded-lg transition-colors ${aba==='dashboard'?'bg-white text-orange-600':'hover:bg-orange-500 text-orange-50'}`}><i className="lucide-layout-dashboard"></i></button>
-                                <button onClick={() => setAba('novo')} className={`p-2 rounded-lg transition-colors ${aba==='novo'?'bg-white text-orange-600':'hover:bg-orange-500 text-orange-50'}`}><i className="lucide-plus"></i></button>
-                                <button onClick={exportarCSV} className="p-2 rounded-lg hover:bg-orange-500 text-orange-50 transition-colors" title="Backup CSV"><i className="lucide-download"></i></button>
+                <div className="flex min-h-screen">
+                    {/* SIDEBAR */}
+                    <aside className="w-20 md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full z-50">
+                        <div className="p-6 flex items-center gap-3">
+                            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20">
+                                <i className="lucide-flame text-slate-900 w-6 h-6"></i>
+                            </div>
+                            <span className="font-black text-lg hidden md:block tracking-tighter italic">SALA DO TEMPO</span>
+                        </div>
+
+                        <nav className="flex-1 px-4 space-y-2 mt-4">
+                            <button onClick={() => setAba('dashboard')} 
+                                className={`w-full flex items-center gap-4 p-3 rounded-xl font-bold transition-all ${aba === 'dashboard' ? 'bg-orange-500 text-slate-900 shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                                <i className="lucide-layout-dashboard"></i>
+                                <span className="hidden md:block">Dashboard</span>
+                            </button>
+                            
+                            <button onClick={() => setAba('novo')} 
+                                className={`w-full flex items-center gap-4 p-3 rounded-xl font-bold transition-all ${aba === 'novo' ? 'bg-orange-500 text-slate-900 shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                                <i className="lucide-plus-circle"></i>
+                                <span className="hidden md:block">Novo Registro</span>
+                            </button>
+
+                            <button onClick={exportarCSV} 
+                                className="w-full flex items-center gap-4 p-3 rounded-xl font-bold text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
+                                <i className="lucide-download"></i>
+                                <span className="hidden md:block">Exportar Backup</span>
+                            </button>
+                        </nav>
+
+                        <div className="p-4 border-t border-slate-800">
+                            <div className="bg-slate-800/50 p-3 rounded-2xl hidden md:block">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Meta de 14 Semanas</p>
+                                <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
+                                    <div className="bg-orange-500 h-full" style={{width: `${(Math.max(...sessoes.map(s=>s.meta), 0)/14)*100}%`}}></div>
+                                </div>
                             </div>
                         </div>
-                    </nav>
+                    </aside>
 
-                    <main className="max-w-5xl mx-auto p-4 md:p-6">
+                    {/* CONTEÚDO PRINCIPAL (DESLOCADO PELA SIDEBAR) */}
+                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10">
                         {aba === 'dashboard' ? (
-                            <div className="space-y-6">
-                                {/* Cards principais (Dark) */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-slate-800 p-5 rounded-3xl shadow-lg border border-slate-700 text-center relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 text-slate-700 opacity-20"><i className="lucide-clock w-24 h-24"></i></div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase relative z-10">Horas Totais</p>
-                                        <p className="text-3xl font-black text-white relative z-10">{Math.floor(sessoes.reduce((acc,s)=>acc+s.tempo,0)/60)}h</p>
+                            <div className="max-w-5xl mx-auto space-y-8">
+                                <header>
+                                    <h2 className="text-3xl font-black text-white">Bem-vindo, <span className="text-orange-500">Guerreiro.</span></h2>
+                                    <p className="text-slate-500 font-medium">Seu progresso nas 14 semanas está sendo monitorado.</p>
+                                </header>
+
+                                {/* Stats Cards */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500"><i className="lucide-clock"></i></div>
+                                            <span className="text-[10px] font-black text-slate-500 uppercase">Horas Estudadas</span>
+                                        </div>
+                                        <p className="text-4xl font-black">{Math.floor(sessoes.reduce((acc,s)=>acc+s.tempo,0)/60)}<span className="text-lg text-slate-500 ml-1">h</span></p>
                                     </div>
-                                    <div className="bg-slate-800 p-5 rounded-3xl shadow-lg border border-slate-700 text-center relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 text-slate-700 opacity-20"><i className="lucide-check-circle w-24 h-24"></i></div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase relative z-10">Questões</p>
-                                        <p className="text-3xl font-black text-white relative z-10">{sessoes.reduce((acc,s)=>acc+s.total,0)}</p>
-                                    </div>
-                                    <div className="bg-slate-800 p-5 rounded-3xl shadow-lg border border-slate-700 text-center relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 text-slate-700 opacity-20"><i className="lucide-target w-24 h-24"></i></div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase relative z-10">Acerto Médio</p>
-                                        <p className="text-3xl font-black text-emerald-400 relative z-10">
+                                    <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500"><i className="lucide-target"></i></div>
+                                            <span className="text-[10px] font-black text-slate-500 uppercase">Acerto Geral</span>
+                                        </div>
+                                        <p className="text-4xl font-black text-emerald-400">
                                             {(() => {
                                                 const t = sessoes.reduce((acc,s)=>acc+s.total,0);
                                                 const c = sessoes.reduce((acc,s)=>acc+s.certas,0);
@@ -143,134 +156,131 @@
                                             })()}%
                                         </p>
                                     </div>
-                                    <div className="bg-slate-800 p-5 rounded-3xl shadow-lg border border-slate-700 text-center relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 text-slate-700 opacity-20"><i className="lucide-flag w-24 h-24"></i></div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase relative z-10">Meta Atual</p>
-                                        <p className="text-3xl font-black text-orange-500 relative z-10">{sessoes.length > 0 ? Math.max(...sessoes.map(s=>s.meta)) : 1}/14</p>
+                                    <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-500"><i className="lucide-layers"></i></div>
+                                            <span className="text-[10px] font-black text-slate-500 uppercase">Meta Atual</span>
+                                        </div>
+                                        <p className="text-4xl font-black text-indigo-400">{sessoes.length > 0 ? Math.max(...sessoes.map(s=>s.meta)) : 1}<span className="text-lg text-slate-500">/14</span></p>
                                     </div>
                                 </div>
 
-                                {/* Gráfico de Evolução 14 Metas (Dark/Orange) */}
-                                <div className="bg-slate-800 p-6 rounded-3xl shadow-lg border border-slate-700">
-                                    <h2 className="text-sm font-black mb-6 uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                        <i className="lucide-trending-up text-orange-500"></i> Evolução - Ciclo de 14 Semanas
-                                    </h2>
-                                    <div className="flex items-end gap-1.5 h-32">
+                                {/* Gráfico de Metas */}
+                                <section className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-xl">
+                                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500 mb-8 italic">Consistência por Semana</h3>
+                                    <div className="flex items-end gap-2 md:gap-4 h-48">
                                         {statsPorMeta.map(m => (
-                                            <div key={m.n} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
-                                                <div className="w-full bg-slate-700/50 rounded-t-lg relative flex flex-col justify-end h-full overflow-hidden">
+                                            <div key={m.n} className="flex-1 flex flex-col items-center gap-3 group">
+                                                <div className="w-full bg-slate-800 rounded-2xl relative flex flex-col justify-end h-full overflow-hidden">
                                                     <div 
-                                                        className="bg-orange-500/80 w-full rounded-t-lg transition-all duration-500 group-hover:bg-orange-400" 
-                                                        style={{height: `${Math.min((m.min/60)*10, 100)}%`}}
+                                                        className="bg-gradient-to-t from-orange-600 to-orange-400 w-full rounded-t-xl transition-all duration-700 group-hover:brightness-125" 
+                                                        style={{height: `${Math.min((m.min/60)*12, 100)}%`}}
                                                     ></div>
                                                 </div>
-                                                <span className="text-[8px] font-black text-slate-500 uppercase group-hover:text-orange-400 transition-colors">M{m.n}</span>
+                                                <span className="text-[10px] font-black text-slate-600 group-hover:text-orange-500 transition-colors uppercase">M{m.n}</span>
                                             </div>
                                         ))}
                                     </div>
-                                </div>
+                                </section>
 
-                                {/* Listagem do Banco de Dados (Dark) */}
-                                <div className="bg-slate-800 rounded-3xl shadow-lg border border-slate-700 overflow-x-auto">
-                                    <table className="w-full text-left text-sm whitespace-nowrap">
-                                        <thead className="bg-slate-900/50 text-[10px] uppercase font-black text-slate-400 border-b border-slate-700">
-                                            <tr>
-                                                <th className="p-4 rounded-tl-3xl">Meta/Disc</th>
-                                                <th className="p-4">Assunto</th>
-                                                <th className="p-4 text-center">Desempenho</th>
-                                                <th className="p-4 rounded-tr-3xl"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700/50">
-                                            {sessoes.map(s => (
-                                                <tr key={s.id} className="hover:bg-slate-700/30 transition-colors">
-                                                    <td className="p-4">
-                                                        <span className="text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20 px-1.5 py-0.5 rounded font-black mr-2">M{s.meta}</span>
-                                                        <span className="font-bold text-slate-200">{s.disciplina}</span>
-                                                    </td>
-                                                    <td className="p-4 text-slate-400 truncate max-w-[200px]">
-                                                        {s.assunto} <br/>
-                                                        <span className="text-[10px] text-slate-500 uppercase tracking-wider">{s.tempo} min • {s.tipo}</span>
-                                                    </td>
-                                                    <td className="p-4 text-center">
-                                                        {s.total > 0 ? (
-                                                            <div className={`font-black ${Math.round((s.certas/s.total)*100) >= 80 ? 'text-emerald-400' : Math.round((s.certas/s.total)*100) >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
-                                                                {Math.round((s.certas/s.total)*100)}%
+                                {/* Lista de Atividades */}
+                                <section className="bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-xl overflow-hidden">
+                                    <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                                        <h3 className="font-black text-slate-300 uppercase text-xs tracking-widest italic">Registros Recentes</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse">
+                                            <tbody className="divide-y divide-slate-800/50">
+                                                {sessoes.map(s => (
+                                                    <tr key={s.id} className="hover:bg-slate-800/30 transition-colors group">
+                                                        <td className="p-5">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="text-[10px] font-black bg-slate-800 text-orange-500 w-10 h-10 rounded-full flex items-center justify-center border border-slate-700">M{s.meta}</div>
+                                                                <div>
+                                                                    <p className="font-bold text-slate-200">{s.disciplina}</p>
+                                                                    <p className="text-xs text-slate-500">{s.assunto}</p>
+                                                                </div>
                                                             </div>
-                                                        ) : <span className="text-slate-600">-</span>}
-                                                    </td>
-                                                    <td className="p-4 text-right">
-                                                        <button onClick={() => excluirSessao(s.id)} className="text-slate-500 hover:text-rose-400 transition-colors p-2 hover:bg-rose-400/10 rounded-lg">
-                                                            <i className="lucide-trash-2 w-4 h-4"></i>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {sessoes.length === 0 && (
-                                                <tr>
-                                                    <td colSpan="4" className="p-8 text-center text-slate-500 font-medium">Nenhum estudo registrado ainda. O relógio está correndo!</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                                        </td>
+                                                        <td className="p-5 text-right">
+                                                            <div className="inline-block px-3 py-1 bg-slate-800 rounded-lg text-xs font-bold text-slate-400">{s.tempo} min</div>
+                                                        </td>
+                                                        <td className="p-5 text-right">
+                                                            {s.total > 0 && (
+                                                                <span className={`font-black ${Math.round((s.certas/s.total)*100) >= 75 ? 'text-emerald-500' : 'text-orange-500'}`}>
+                                                                    {Math.round((s.certas/s.total)*100)}%
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-5 text-right">
+                                                            <button onClick={() => excluirSessao(s.id)} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-500 transition-all">
+                                                                <i className="lucide-trash-2 w-5 h-5"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </section>
                             </div>
                         ) : (
-                            <div className="max-w-lg mx-auto bg-slate-800 p-8 rounded-[40px] shadow-2xl border border-slate-700 relative overflow-hidden">
-                                <div className="absolute -right-10 -top-10 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl"></div>
-                                
-                                <h2 className="text-2xl font-black mb-8 text-white tracking-tight relative z-10 flex items-center gap-3">
-                                    <div className="bg-orange-500/20 p-2 rounded-xl text-orange-500"><i className="lucide-pen-line"></i></div>
-                                    Novo Registro
-                                </h2>
+                            <div className="max-w-2xl mx-auto py-10">
+                                <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-2xl relative overflow-hidden">
+                                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl"></div>
+                                    <h2 className="text-3xl font-black mb-8 flex items-center gap-4">
+                                        <span className="p-3 bg-orange-500 rounded-2xl text-slate-900"><i className="lucide-edit-3"></i></span>
+                                        Registrar Estudo
+                                    </h2>
 
-                                <form onSubmit={salvarSessao} className="space-y-5 relative z-10">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Meta (Semana)</label>
-                                            <select name="meta" className="w-full bg-slate-900/50 text-white p-3.5 rounded-2xl border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-bold transition-all appearance-none">
-                                                {Array.from({length:14}, (_,i)=><option key={i+1} value={i+1} className="bg-slate-800">Semana {i+1}</option>)}
+                                    <form onSubmit={salvarSessao} className="space-y-6 relative z-10">
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">Qual Meta?</label>
+                                                <select name="meta" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all text-orange-500">
+                                                    {Array.from({length:14}, (_,i)=><option key={i+1} value={i+1}>Semana {i+1}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">Tipo de Atividade</label>
+                                                <select name="tipo" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all">
+                                                    {CATEGORIAS.map(c=><option key={c}>{c}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">Disciplina</label>
+                                            <select name="disciplina" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all">
+                                                {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
                                             </select>
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Tipo</label>
-                                            <select name="tipo" className="w-full bg-slate-900/50 text-white p-3.5 rounded-2xl border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-bold transition-all appearance-none">
-                                                {CATEGORIAS.map(c=><option key={c} className="bg-slate-800">{c}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Disciplina</label>
-                                        <select name="disciplina" className="w-full bg-slate-900/50 text-white p-3.5 rounded-2xl border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-bold transition-all appearance-none">
-                                            {DISCIPLINAS.map(d=><option key={d} className="bg-slate-800">{d}</option>)}
-                                        </select>
-                                    </div>
 
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Assunto Detalhado</label>
-                                        <input name="assunto" required placeholder="Ex: Direitos e Garantias Fundamentais" className="w-full bg-slate-900/50 text-white p-3.5 rounded-2xl border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-bold transition-all placeholder:text-slate-600" />
-                                    </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-2">O que você estudou hoje?</label>
+                                            <input name="assunto" required placeholder="Ex: Atos Administrativos" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold transition-all placeholder:text-slate-700" />
+                                        </div>
 
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Minutos</label>
-                                            <input name="tempo" type="number" required placeholder="0" className="w-full bg-slate-900/50 text-white p-3.5 rounded-2xl border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-bold transition-all text-center" />
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div className="space-y-2 text-center">
+                                                <label className="text-[10px] font-black uppercase text-slate-500">Minutos</label>
+                                                <input name="tempo" type="number" required placeholder="0" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-2 text-center">
+                                                <label className="text-[10px] font-black uppercase text-slate-500">Questões</label>
+                                                <input name="total" type="number" placeholder="0" className="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 focus:border-orange-500 outline-none font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-2 text-center">
+                                                <label className="text-[10px] font-black uppercase text-slate-500">Certas</label>
+                                                <input name="certas" type="number" placeholder="0" className="w-full bg-slate-950 p-4 rounded-2xl border border-emerald-900 focus:border-emerald-500 outline-none font-bold text-center text-emerald-500" />
+                                            </div>
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Total Q.</label>
-                                            <input name="total" type="number" placeholder="0" className="w-full bg-slate-900/50 text-white p-3.5 rounded-2xl border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-bold transition-all text-center" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Certas</label>
-                                            <input name="certas" type="number" placeholder="0" className="w-full bg-slate-900/50 text-emerald-400 p-3.5 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none font-black transition-all text-center placeholder:text-slate-600" />
-                                        </div>
-                                    </div>
 
-                                    <button type="submit" className="w-full bg-gradient-to-r from-orange-600 to-orange-500 text-white mt-4 py-4 rounded-2xl font-black tracking-wide shadow-lg shadow-orange-900/20 hover:from-orange-500 hover:to-orange-400 transition-all transform active:scale-95 flex items-center justify-center gap-2">
-                                        SALVAR NO BANCO <i className="lucide-arrow-right w-4 h-4"></i>
-                                    </button>
-                                </form>
+                                        <button type="submit" className="w-full bg-orange-500 text-slate-950 py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all">
+                                            SALVAR SESSÃO NO CLOUD
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
                         )}
                     </main>
