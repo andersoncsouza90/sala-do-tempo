@@ -8,18 +8,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #05070a; color: white; margin: 0; }
-        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
-        .orange-button { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); transition: all 0.3s ease; }
-        .orange-button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -10px #f97316; }
-        select { cursor: pointer; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #1f232b; color: white; margin: 0; }
+        .glass { background: rgba(31, 41, 55, 0.7); border: 1px solid rgba(255,255,255,0.05); }
+        .card-blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .card-green { background: linear-gradient(135deg, #65a30d 0%, #4d7c0f 100%); }
+        .card-orange { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); }
+        .card-yellow { background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -27,7 +29,7 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts || {};
 
         const SUPABASE_URL = 'https://sflzuzorlmddprbkdczv.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3viV5YSChpIMXYHAz-e-5g_GzP1d0E8';
@@ -36,7 +38,7 @@
         const DISCIPLINAS = ["Português", "Matemática Financeira", "Estatística", "Direito Tributário", "LTE", "Contabilidade Geral", "Contabilidade de Custos", "Auditoria", "TI", "Direito Constitucional", "Direito Administrativo", "Direito Civil", "Direito Empresarial", "Direito Penal", "Administração Geral e Pública"];
 
         function App() {
-            const [aba, setAba] = useState('dashboard');
+            const [aba, setAba] = useState('desempenho'); // Começando na nova aba
             const [plano, setPlano] = useState([]);
             const [sessoes, setSessoes] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -55,33 +57,19 @@
                 } finally { setLoading(false); }
             }
 
+            // FUNÇÕES DE SALVAR/DELETAR...
             async function handleSalvarMeta(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                const dados = {
-                    meta: parseInt(fd.get('meta')),
-                    disciplina: fd.get('disciplina'),
-                    assunto: fd.get('assunto'),
-                    status: fd.get('tipo')
-                };
-
-                let res = editando 
-                    ? await supabaseClient.from('cronograma').update(dados).eq('id', editando.id)
-                    : await supabaseClient.from('cronograma').insert([dados]);
-
-                if (!res.error) {
-                    setEditando(null);
-                    fetchData();
-                    e.target.reset();
-                } else {
-                    alert("Erro ao salvar: " + res.error.message);
-                }
+                const dados = { meta: parseInt(fd.get('meta')), disciplina: fd.get('disciplina'), assunto: fd.get('assunto'), status: fd.get('tipo') };
+                let res = editando ? await supabaseClient.from('cronograma').update(dados).eq('id', editando.id) : await supabaseClient.from('cronograma').insert([dados]);
+                if (!res.error) { setEditando(null); fetchData(); e.target.reset(); }
             }
 
             async function handleDeletarMeta(id) {
-                if(confirm("Deseja realmente excluir esta meta?")) {
-                    const { error } = await supabaseClient.from('cronograma').delete().eq('id', id);
-                    if(!error) fetchData();
+                if(confirm("Deseja excluir esta meta?")) {
+                    await supabaseClient.from('cronograma').delete().eq('id', id);
+                    fetchData();
                 }
             }
 
@@ -89,127 +77,195 @@
                 e.preventDefault();
                 const fd = new FormData(e.target);
                 const payload = {
-                    cronograma_id: tarefaAtiva.id,
-                    meta: tarefaAtiva.meta,
-                    disciplina: tarefaAtiva.disciplina,
-                    assunto: tarefaAtiva.assunto,
-                    tempo: parseInt(fd.get('tempo')) || 0,
-                    total: parseInt(fd.get('total')) || 0,
-                    certas: parseInt(fd.get('certas')) || 0,
-                    tipo: tarefaAtiva.status
+                    cronograma_id: tarefaAtiva.id, meta: tarefaAtiva.meta, disciplina: tarefaAtiva.disciplina, assunto: tarefaAtiva.assunto,
+                    tempo: parseInt(fd.get('tempo')) || 0, total: parseInt(fd.get('total')) || 0, certas: parseInt(fd.get('certas')) || 0, tipo: tarefaAtiva.status
                 };
-
                 const { error } = await supabaseClient.from('sessoes').insert([payload]);
                 if (!error) { setTarefaAtiva(null); fetchData(); }
             }
 
+            // --- CÁLCULOS ABA PAINEL ---
             const dadosEvolucao = useMemo(() => {
                 const metasUnicas = [...new Set(plano.map(p => p.meta))].sort((a,b) => a-b);
-                return metasUnicas.map(m => ({
-                    name: `M${m}`,
-                    horas: parseFloat((sessoes.filter(s => s.meta === m).reduce((acc, curr) => acc + curr.tempo, 0) / 60).toFixed(1))
-                }));
+                return metasUnicas.map(m => ({ name: `M${m}`, horas: parseFloat((sessoes.filter(s => s.meta === m).reduce((a, c) => a + c.tempo, 0) / 60).toFixed(1)) }));
             }, [sessoes, plano]);
 
-            const statsGeral = useMemo(() => {
-                const map = {};
+            // --- CÁLCULOS ABA DESEMPENHO ACUMULADO ---
+            const statsDesempenho = useMemo(() => {
+                let tAcertos = 0, tQuestoes = 0, tTempo = 0;
+                let mapDisc = {};
+
                 sessoes.forEach(s => {
-                    if (!map[s.disciplina]) map[s.disciplina] = { tempo: 0, q: 0, c: 0 };
-                    map[s.disciplina].tempo += s.tempo;
-                    map[s.disciplina].q += s.total;
-                    map[s.disciplina].c += s.certas;
+                    tAcertos += s.certas || 0;
+                    tQuestoes += s.total || 0;
+                    tTempo += s.tempo || 0;
+
+                    if (!mapDisc[s.disciplina]) mapDisc[s.disciplina] = { acertos: 0, questoes: 0, tempoTotal: 0, sessoesCount: 0 };
+                    mapDisc[s.disciplina].acertos += s.certas || 0;
+                    mapDisc[s.disciplina].questoes += s.total || 0;
+                    mapDisc[s.disciplina].tempoTotal += s.tempo || 0;
+                    mapDisc[s.disciplina].sessoesCount += 1;
                 });
-                return Object.entries(map).map(([nome, d]) => ({
-                    nome, ...d, perc: d.q > 0 ? Math.round((d.c/d.q)*100) : 0
-                })).sort((a,b) => b.tempo - a.tempo);
+
+                const geral = {
+                    perc: tQuestoes > 0 ? ((tAcertos / tQuestoes) * 100).toFixed(1) : 0,
+                    horas: `${Math.floor(tTempo / 60)}h${String(tTempo % 60).padStart(2, '0')}m`,
+                    questoes: tQuestoes,
+                    mediaSessao: sessoes.length > 0 ? `${Math.round(tTempo / sessoes.length)}m` : '0m',
+                    tAcertos, tQuestoes, tTempo
+                };
+
+                const tabela = Object.entries(mapDisc).map(([disciplina, d]) => ({
+                    disciplina, acertos: d.acertos, questoes: d.questoes,
+                    perc: d.questoes > 0 ? ((d.acertos / d.questoes) * 100).toFixed(1) : '-',
+                    tempoMedio: d.sessoesCount > 0 ? `${Math.round(d.tempoTotal / d.sessoesCount)}m` : '-'
+                })).sort((a, b) => b.questoes - a.questoes);
+
+                return { geral, tabela };
             }, [sessoes]);
 
-            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black animate-pulse uppercase tracking-[0.5em]">Carregando Sala do Tempo...</div>;
+
+            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black animate-pulse uppercase tracking-[0.5em]">Carregando Dados...</div>;
 
             return (
                 <div className="flex min-h-screen pb-10">
                     {/* SIDEBAR */}
-                    <aside className="w-20 md:w-64 bg-[#0a0c10] border-r border-white/5 fixed h-full z-40 p-4">
-                        <div className="hidden md:block py-10 text-orange-500 font-black italic text-xl text-center tracking-tighter">SALA DO TEMPO</div>
+                    <aside className="w-20 md:w-64 bg-[#111827] border-r border-slate-800 fixed h-full z-40 p-4">
+                        <div className="hidden md:block py-10 text-orange-500 font-black italic text-xl text-center">SALA DO TEMPO</div>
                         <nav className="space-y-4">
-                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex gap-4 items-center justify-center md:justify-start ${aba==='dashboard'?'bg-orange-600 text-white shadow-lg shadow-orange-600/20':'text-slate-500 hover:text-white'}`}>
-                                <span>📊</span> <span className="hidden md:block font-bold">Painel</span>
+                            <button onClick={()=>setAba('desempenho')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='desempenho'?'bg-slate-800 text-white font-bold':'text-slate-400 hover:bg-slate-800/50'}`}>
+                                <span>🎯</span> <span className="hidden md:block">Desempenho</span>
                             </button>
-                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-2xl flex gap-4 items-center justify-center md:justify-start ${aba==='planejar'?'bg-orange-600 text-white shadow-lg shadow-orange-600/20':'text-slate-500 hover:text-white'}`}>
-                                <span>📅</span> <span className="hidden md:block font-bold">Metas</span>
+                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='dashboard'?'bg-slate-800 text-white font-bold':'text-slate-400 hover:bg-slate-800/50'}`}>
+                                <span>📊</span> <span className="hidden md:block">Painel & Estudo</span>
+                            </button>
+                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='planejar'?'bg-slate-800 text-white font-bold':'text-slate-400 hover:bg-slate-800/50'}`}>
+                                <span>📅</span> <span className="hidden md:block">Metas</span>
                             </button>
                         </nav>
                     </aside>
 
                     {/* MAIN */}
-                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10">
-                        {aba === 'dashboard' ? (
-                            <div className="max-w-6xl mx-auto space-y-8">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                                    <div>
-                                        <h2 className="text-3xl font-black italic">DASHBOARD PERFORMANCE</h2>
-                                        <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">Acompanhe sua evolução rumo ao cargo</p>
-                                    </div>
-                                    <div className="glass p-2 rounded-2xl flex items-center gap-3 border-orange-500/20 border">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase px-2">Filtrar Meta:</span>
-                                        <select value={filtroMeta} onChange={(e)=>setFiltroMeta(e.target.value)} className="bg-orange-600 text-white font-black px-6 py-2 rounded-xl outline-none">
-                                            {['Todas', ...new Set(plano.map(p => p.meta))].sort((a,b)=>a-b).map(m => (
-                                                <option key={m} value={m}>{m === 'Todas' ? 'Visão Geral' : `Meta ${m}`}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10 custom-scrollbar overflow-x-hidden">
+                        
+                        {aba === 'desempenho' && (
+                            <div className="max-w-7xl mx-auto space-y-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold flex items-center gap-2"><span className="text-green-400">📈</span> Desempenho Acumulado</h2>
+                                    <p className="text-slate-400 text-sm mt-1">Aqui você acompanha seu desempenho em cada disciplina, questões resolvidas e tempo estudado.</p>
                                 </div>
 
-                                {/* GRÁFICO */}
-                                <div className="glass p-8 rounded-[2.5rem] h-80">
-                                    <h3 className="text-[10px] font-black text-slate-500 uppercase mb-6">Horas Dedicadas por Meta</h3>
+                                <div className="flex flex-col lg:flex-row gap-6">
+                                    {/* CARDS ESQUERDA */}
+                                    <div className="w-full lg:w-1/4 space-y-4">
+                                        <div className="card-blue p-6 rounded-xl shadow-lg relative overflow-hidden">
+                                            <p className="text-sm font-semibold opacity-90">Desempenho atingido</p>
+                                            <p className="text-4xl font-black mt-2">{statsDesempenho.geral.perc}%</p>
+                                        </div>
+                                        <div className="card-green p-6 rounded-xl shadow-lg relative overflow-hidden">
+                                            <p className="text-sm font-semibold opacity-90">Horas estudadas</p>
+                                            <p className="text-4xl font-black mt-2">{statsDesempenho.geral.horas}</p>
+                                        </div>
+                                        <div className="card-orange p-6 rounded-xl shadow-lg relative overflow-hidden">
+                                            <p className="text-sm font-semibold opacity-90">Questões resolvidas</p>
+                                            <p className="text-4xl font-black mt-2">{statsDesempenho.geral.questoes}</p>
+                                        </div>
+                                        <div className="card-yellow p-6 rounded-xl shadow-lg relative overflow-hidden">
+                                            <p className="text-sm font-semibold opacity-90">Média por sessão</p>
+                                            <p className="text-4xl font-black mt-2">{statsDesempenho.geral.mediaSessao}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* TABELA DIREITA */}
+                                    <div className="w-full lg:w-3/4 bg-[#262b36] rounded-xl overflow-hidden shadow-xl border border-slate-700/50">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-[#1a1e26] text-slate-300 font-semibold border-b border-slate-700/50">
+                                                    <tr>
+                                                        <th className="p-5">Disciplina ↕</th>
+                                                        <th className="p-5 text-center">Acertos ↕</th>
+                                                        <th className="p-5 text-center">Questões ↕</th>
+                                                        <th className="p-5 text-center">% de acertos ↕</th>
+                                                        <th className="p-5 text-right">Tempo médio ↕</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-700/50">
+                                                    {statsDesempenho.tabela.map(d => (
+                                                        <tr key={d.disciplina} className="hover:bg-white/[0.02] transition-colors">
+                                                            <td className="p-5 font-medium">{d.disciplina}</td>
+                                                            <td className="p-5 text-center">{d.acertos}</td>
+                                                            <td className="p-5 text-center">{d.questoes}</td>
+                                                            <td className="p-5 text-center">{d.perc}%</td>
+                                                            <td className="p-5 text-right">{d.tempoMedio}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot className="bg-[#1a1e26] font-bold border-t-2 border-slate-700">
+                                                    <tr>
+                                                        <td className="p-5 uppercase tracking-wider">Total</td>
+                                                        <td className="p-5 text-center">{statsDesempenho.geral.tAcertos}</td>
+                                                        <td className="p-5 text-center">{statsDesempenho.geral.tQuestoes}</td>
+                                                        <td className="p-5 text-center text-blue-400">{statsDesempenho.geral.perc}%</td>
+                                                        <td className="p-5 text-right">-</td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* O restante do código (Aba Dashboard de Estudo e Aba Metas) se mantém igual, apenas embutido aqui */}
+                        {aba === 'dashboard' && (
+                            <div className="max-w-6xl mx-auto space-y-8">
+                                {/* Seletor de Meta */}
+                                <div className="flex justify-between items-center bg-[#262b36] p-4 rounded-xl border border-slate-700/50">
+                                    <h2 className="text-xl font-bold">Painel de Estudo</h2>
+                                    <select value={filtroMeta} onChange={(e)=>setFiltroMeta(e.target.value)} className="bg-slate-800 text-white px-4 py-2 rounded-lg outline-none cursor-pointer border border-slate-700">
+                                        {['Todas', ...new Set(plano.map(p => p.meta))].sort((a,b)=>a-b).map(m => (
+                                            <option key={m} value={m}>{m === 'Todas' ? 'Todas as Metas' : `Meta ${m}`}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Gráfico de Área */}
+                                <div className="bg-[#262b36] p-8 rounded-xl h-80 border border-slate-700/50">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">Horas por Meta</h3>
                                     {window.Recharts ? (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={dadosEvolucao}>
                                                 <defs>
                                                     <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                                                        <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                                                     </linearGradient>
                                                 </defs>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                                                <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                                                <Tooltip contentStyle={{backgroundColor: '#0f172a', border: 'none', borderRadius: '12px'}} />
-                                                <Area type="monotone" dataKey="horas" stroke="#f97316" strokeWidth={3} fill="url(#colorHr)" />
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                                                <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                                                <Tooltip contentStyle={{backgroundColor: '#1f2937', border: 'none', borderRadius: '8px'}} />
+                                                <Area type="monotone" dataKey="horas" stroke="#3b82f6" strokeWidth={3} fill="url(#colorHr)" />
                                             </AreaChart>
                                         </ResponsiveContainer>
-                                    ) : <div className="text-slate-700 animate-pulse text-center pt-20 font-black">CARREGANDO GRÁFICOS...</div>}
+                                    ) : <div className="text-center pt-20">Carregando gráfico...</div>}
                                 </div>
 
-                                {/* STATS CARDS */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    {statsGeral.slice(0, 4).map(s => (
-                                        <div key={s.nome} className="glass p-6 rounded-3xl border-l-4 border-orange-500">
-                                            <p className="text-[10px] font-black text-slate-500 uppercase truncate">{s.nome}</p>
-                                            <div className="flex justify-between items-end mt-2">
-                                                <span className="text-2xl font-black text-orange-500">{s.perc}%</span>
-                                                <span className="text-xs font-mono text-slate-400">{Math.round(s.tempo/60)}h</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* TABELA */}
-                                <div className="glass rounded-[2rem] overflow-hidden">
+                                {/* Tabela de Tarefas para Executar */}
+                                <div className="bg-[#262b36] rounded-xl overflow-hidden border border-slate-700/50">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="bg-white/5 text-slate-500 uppercase text-[10px] font-black">
-                                            <tr><th className="p-6">Meta</th><th className="p-6">Disciplina</th><th className="p-6 text-center">Tempo</th><th className="p-6 text-right">Ação</th></tr>
+                                        <thead className="bg-[#1a1e26] text-slate-400 font-semibold border-b border-slate-700/50">
+                                            <tr><th className="p-5">Meta</th><th className="p-5">Atividade</th><th className="p-5 text-center">Progresso</th><th className="p-5 text-right">Ação</th></tr>
                                         </thead>
-                                        <tbody className="divide-y divide-white/5">
+                                        <tbody className="divide-y divide-slate-700/50">
                                             {plano.filter(p => filtroMeta === 'Todas' || p.meta === parseInt(filtroMeta)).map(p => {
                                                 const tempo = sessoes.filter(s => s.cronograma_id === p.id).reduce((a,b)=>a+b.tempo, 0);
                                                 return (
                                                     <tr key={p.id} className="hover:bg-white/5">
-                                                        <td className="p-6 text-orange-500 font-black italic">M{p.meta}</td>
-                                                        <td className="p-6 font-bold">{p.disciplina}<br/><span className="text-[10px] text-slate-500 font-normal uppercase italic">{p.assunto}</span></td>
-                                                        <td className="p-6 text-center font-mono text-orange-200">{tempo}m</td>
-                                                        <td className="p-6 text-right"><button onClick={()=>setTarefaAtiva(p)} className="orange-button p-3 rounded-xl text-white">▶</button></td>
+                                                        <td className="p-5 text-blue-400 font-bold">M{p.meta}</td>
+                                                        <td className="p-5 font-medium">{p.disciplina}<br/><span className="text-xs text-slate-400 font-normal">{p.assunto} ({p.status})</span></td>
+                                                        <td className="p-5 text-center font-mono text-slate-300">{tempo}m</td>
+                                                        <td className="p-5 text-right"><button onClick={()=>setTarefaAtiva(p)} className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-white font-bold transition-colors">Estudar</button></td>
                                                     </tr>
                                                 );
                                             })}
@@ -217,37 +273,38 @@
                                     </table>
                                 </div>
                             </div>
-                        ) : (
-                            /* PLANEJAMENTO */
-                            <div className="max-w-2xl mx-auto space-y-10">
-                                <h2 className="text-3xl font-black italic uppercase">Gestão de <span className="text-orange-500">Metas</span></h2>
-                                <form onSubmit={handleSalvarMeta} className="glass p-8 rounded-[2.5rem] border-orange-500/10 border space-y-4">
+                        )}
+
+                        {aba === 'planejar' && (
+                            <div className="max-w-2xl mx-auto space-y-8">
+                                <h2 className="text-2xl font-bold">Gerenciar Metas</h2>
+                                <form onSubmit={handleSalvarMeta} className="bg-[#262b36] p-6 rounded-xl border border-slate-700/50 space-y-4">
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Nº Meta" className="w-full bg-slate-900/50 p-4 rounded-2xl border border-white/10 font-bold" required />
-                                        <select name="tipo" defaultValue={editando?.status} className="w-full bg-slate-900/50 p-4 rounded-2xl border border-white/10 font-bold">
+                                        <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Nº Meta" className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 outline-none focus:border-blue-500" required />
+                                        <select name="tipo" defaultValue={editando?.status} className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 outline-none">
                                             <option>Teoria</option><option>Questões</option><option>Revisão</option>
                                         </select>
                                     </div>
-                                    <select name="disciplina" defaultValue={editando?.disciplina} className="w-full bg-slate-900/50 p-4 rounded-2xl border border-white/10 font-bold">
+                                    <select name="disciplina" defaultValue={editando?.disciplina} className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 outline-none">
                                         {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
                                     </select>
-                                    <input name="assunto" defaultValue={editando?.assunto} placeholder="Assunto específico" className="w-full bg-slate-900/50 p-4 rounded-2xl border border-white/10 font-bold" required />
-                                    <button className="w-full orange-button py-5 rounded-2xl font-black uppercase tracking-widest text-white">
-                                        {editando ? 'Salvar Alterações' : 'Adicionar Meta'}
+                                    <input name="assunto" defaultValue={editando?.assunto} placeholder="Assunto específico" className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 outline-none focus:border-blue-500" required />
+                                    <button className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-lg font-bold text-white transition-colors">
+                                        {editando ? 'Atualizar Meta' : 'Criar Nova Meta'}
                                     </button>
                                 </form>
 
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {plano.map(t => (
-                                        <div key={t.id} className="glass p-6 rounded-3xl flex justify-between items-center group">
+                                        <div key={t.id} className="bg-[#262b36] p-5 rounded-xl border border-slate-700/50 flex justify-between items-center">
                                             <div>
-                                                <span className="text-[10px] font-black text-orange-500 italic uppercase">Meta {t.meta}</span>
-                                                <h4 className="font-bold">{t.disciplina}</h4>
-                                                <p className="text-[10px] text-slate-500 uppercase">{t.assunto}</p>
+                                                <span className="text-xs font-bold text-blue-400">Meta {t.meta}</span>
+                                                <h4 className="font-semibold">{t.disciplina}</h4>
+                                                <p className="text-xs text-slate-400">{t.assunto}</p>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={()=>setEditando(t)} className="text-slate-500 hover:text-white p-2 text-xl">✎</button>
-                                                <button onClick={()=>handleDeletarMeta(t.id)} className="text-slate-700 hover:text-red-500 p-2 text-xl">🗑</button>
+                                            <div className="flex gap-3">
+                                                <button onClick={()=>setEditando(t)} className="text-slate-400 hover:text-white">✏️</button>
+                                                <button onClick={()=>handleDeletarMeta(t.id)} className="text-slate-400 hover:text-red-500">🗑️</button>
                                             </div>
                                         </div>
                                     ))}
@@ -256,20 +313,29 @@
                         )}
                     </main>
 
-                    {/* MODAL */}
+                    {/* MODAL SESSÃO */}
                     {tarefaAtiva && (
-                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-md">
-                            <div className="bg-[#0b0f1a] w-full max-w-sm p-10 rounded-[3rem] border border-orange-500/30">
-                                <h3 className="text-xl font-black mb-1">{tarefaAtiva.disciplina}</h3>
-                                <p className="text-orange-500 text-[10px] font-black mb-8 italic uppercase tracking-tighter">{tarefaAtiva.assunto}</p>
-                                <form onSubmit={handleSalvarSessao} className="space-y-6">
-                                    <input name="tempo" type="number" placeholder="Minutos" className="w-full bg-slate-900 p-4 rounded-2xl border border-white/10 font-bold" required />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input name="total" type="number" placeholder="Questões" className="w-full bg-slate-900 p-4 rounded-2xl border border-white/10 font-bold" />
-                                        <input name="certas" type="number" placeholder="Acertos" className="w-full bg-slate-900 p-4 rounded-2xl border border-white/10 text-emerald-400 font-bold" />
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                            <div className="bg-[#1f232b] w-full max-w-sm p-8 rounded-2xl border border-slate-700">
+                                <h3 className="text-lg font-bold mb-1">{tarefaAtiva.disciplina}</h3>
+                                <p className="text-blue-400 text-xs font-bold mb-6">{tarefaAtiva.assunto}</p>
+                                <form onSubmit={handleSalvarSessao} className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-semibold text-slate-400">Tempo Estudado (min)</label>
+                                        <input name="tempo" type="number" className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 mt-1" required />
                                     </div>
-                                    <button className="w-full orange-button py-5 rounded-2xl font-black text-white">CONCLUIR SESSÃO</button>
-                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-500 font-bold text-[10px] uppercase pt-4">Voltar</button>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-semibold text-slate-400">Qtd Questões</label>
+                                            <input name="total" type="number" className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 mt-1" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-semibold text-slate-400">Acertos</label>
+                                            <input name="certas" type="number" className="w-full bg-slate-800 p-3 rounded-lg border border-slate-700 mt-1" />
+                                        </div>
+                                    </div>
+                                    <button className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-lg font-bold mt-2">Salvar Sessão</button>
+                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-400 font-bold text-xs pt-3">Cancelar</button>
                                 </form>
                             </div>
                         </div>
