@@ -45,24 +45,18 @@
             const [loading, setLoading] = useState(true);
             const [tarefaAtiva, setTarefaAtiva] = useState(null);
             const [editando, setEditando] = useState(null);
+            const [editandoSessao, setEditandoSessao] = useState(null); // Estado para editar sessão
             const [filtroMeta, setFiltroMeta] = useState('Todas');
 
-            // Estados do Cronômetro
             const [segundos, setSegundos] = useState(0);
             const [ativo, setAtivo] = useState(false);
             const timerRef = useRef(null);
 
             useEffect(() => { fetchData(); }, []);
 
-            // Lógica do Cronômetro
             useEffect(() => {
-                if (ativo) {
-                    timerRef.current = setInterval(() => {
-                        setSegundos(s => s + 1);
-                    }, 1000);
-                } else {
-                    clearInterval(timerRef.current);
-                }
+                if (ativo) { timerRef.current = setInterval(() => setSegundos(s => s + 1), 1000); }
+                else { clearInterval(timerRef.current); }
                 return () => clearInterval(timerRef.current);
             }, [ativo]);
 
@@ -76,12 +70,47 @@
             async function fetchData() {
                 try {
                     const { data: cron } = await supabaseClient.from('cronograma').select('*').order('meta', { ascending: true });
-                    const { data: sess } = await supabaseClient.from('sessoes').select('*');
+                    const { data: sess } = await supabaseClient.from('sessoes').select('*').order('created_at', { ascending: false });
                     setPlano(cron || []);
                     setSessoes(sess || []);
                 } finally { setLoading(false); }
             }
 
+            // SALVAR/EDITAR SESSÃO
+            async function handleSalvarSessao(e) {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const dados = {
+                    tempo: parseInt(fd.get('tempo')) || 0,
+                    total: parseInt(fd.get('total')) || 0,
+                    certas: parseInt(fd.get('certas')) || 0
+                };
+
+                let error;
+                if (editandoSessao) {
+                    const res = await supabaseClient.from('sessoes').update(dados).eq('id', editandoSessao.id);
+                    error = res.error;
+                } else {
+                    const payload = { ...dados, cronograma_id: tarefaAtiva.id, meta: tarefaAtiva.meta, disciplina: tarefaAtiva.disciplina, assunto: tarefaAtiva.assunto, tipo: tarefaAtiva.status };
+                    const res = await supabaseClient.from('sessoes').insert([payload]);
+                    error = res.error;
+                }
+
+                if (!error) { 
+                    setTarefaAtiva(null); 
+                    setEditandoSessao(null); 
+                    fetchData(); 
+                }
+            }
+
+            async function handleDeletarSessao(id) {
+                if(confirm("Deseja excluir este registro de estudo definitivamente?")) {
+                    await supabaseClient.from('sessoes').delete().eq('id', id);
+                    fetchData();
+                }
+            }
+
+            // MÉTODOS DE METAS (CRONOGRAMA)
             async function handleSalvarMeta(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
@@ -91,32 +120,18 @@
             }
 
             async function handleDeletarMeta(id) {
-                if(confirm("Deseja excluir esta meta?")) {
+                if(confirm("Deseja excluir esta meta? Isso não apagará as sessões já feitas.")) {
                     await supabaseClient.from('cronograma').delete().eq('id', id);
                     fetchData();
                 }
             }
 
-            async function handleSalvarSessao(e) {
-                e.preventDefault();
-                const fd = new FormData(e.target);
-                const payload = {
-                    cronograma_id: tarefaAtiva.id, meta: tarefaAtiva.meta, disciplina: tarefaAtiva.disciplina, assunto: tarefaAtiva.assunto,
-                    tempo: parseInt(fd.get('tempo')) || 0, total: parseInt(fd.get('total')) || 0, certas: parseInt(fd.get('certas')) || 0, tipo: tarefaAtiva.status
-                };
-                const { error } = await supabaseClient.from('sessoes').insert([payload]);
-                if (!error) { setTarefaAtiva(null); fetchData(); }
-            }
-
+            // CÁLCULOS
             const painelStats = useMemo(() => {
-                const sessoesFiltradas = sessoes.filter(s => filtroMeta === 'Todas' || s.meta === parseInt(filtroMeta));
+                const filtradas = sessoes.filter(s => filtroMeta === 'Todas' || s.meta === parseInt(filtroMeta));
                 let t = 0, q = 0, a = 0;
-                sessoesFiltradas.forEach(s => { t += s.tempo || 0; q += s.total || 0; a += s.certas || 0; });
-                return {
-                    horas: `${Math.floor(t / 60)}h${String(t % 60).padStart(2, '0')}m`,
-                    questoes: q,
-                    desempenho: q > 0 ? Math.round((a / q) * 100) : 0
-                };
+                filtradas.forEach(s => { t += s.tempo || 0; q += s.total || 0; a += s.certas || 0; });
+                return { horas: `${Math.floor(t / 60)}h${String(t % 60).padStart(2, '0')}m`, questoes: q, desempenho: q > 0 ? Math.round((a / q) * 100) : 0 };
             }, [sessoes, filtroMeta]);
 
             const statsDesempenho = useMemo(() => {
@@ -149,110 +164,82 @@
                 });
             }, [sessoes, plano]);
 
-            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black animate-pulse uppercase tracking-[0.5em]">SALA DO TEMPO...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black animate-pulse">SALA DO TEMPO...</div>;
 
             return (
                 <div className="flex min-h-screen pb-10">
                     {/* SIDEBAR */}
-                    <aside className="w-20 md:w-64 bg-[#111827] border-r border-slate-800 fixed h-full z-40 p-4">
-                        <div className="hidden md:block py-10 text-orange-500 font-black italic text-xl text-center">SALA DO TEMPO</div>
+                    <aside className="w-20 md:w-64 bg-[#111827] border-r border-slate-800 fixed h-full z-40 p-4 text-center">
+                        <div className="hidden md:block py-10 text-orange-500 font-black italic text-xl">SALA DO TEMPO</div>
                         <nav className="space-y-4">
-                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='dashboard'?'bg-slate-800 text-white font-bold shadow-lg shadow-black/20':'text-slate-400 hover:bg-slate-800/50'}`}>
+                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='dashboard'?'bg-slate-800 text-white font-bold':'text-slate-400 hover:bg-slate-800/50'}`}>
                                 <span>📊</span> <span className="hidden md:block">Painel & Estudo</span>
                             </button>
-                            <button onClick={()=>setAba('desempenho')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='desempenho'?'bg-slate-800 text-white font-bold shadow-lg shadow-black/20':'text-slate-400 hover:bg-slate-800/50'}`}>
+                            <button onClick={()=>setAba('desempenho')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='desempenho'?'bg-slate-800 text-white font-bold':'text-slate-400 hover:bg-slate-800/50'}`}>
                                 <span>🎯</span> <span className="hidden md:block">Desempenho</span>
                             </button>
-                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='planejar'?'bg-slate-800 text-white font-bold shadow-lg shadow-black/20':'text-slate-400 hover:bg-slate-800/50'}`}>
+                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-2xl flex gap-4 items-center ${aba==='planejar'?'bg-slate-800 text-white font-bold':'text-slate-400 hover:bg-slate-800/50'}`}>
                                 <span>📅</span> <span className="hidden md:block">Metas</span>
                             </button>
                         </nav>
                     </aside>
 
                     {/* MAIN */}
-                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10 custom-scrollbar overflow-x-hidden">
+                    <main className="flex-1 ml-20 md:ml-64 p-4 md:p-10 custom-scrollbar">
                         
                         {aba === 'dashboard' && (
                             <div className="max-w-6xl mx-auto space-y-8">
-                                {/* Cronômetro e Seletor */}
                                 <div className="flex flex-col lg:flex-row gap-6">
-                                    {/* CRONÔMETRO PROFISSIONAL */}
                                     <div className="lg:w-1/2 glass rounded-[2rem] p-6 flex flex-col items-center justify-center chrono-glow border-blue-500/20">
-                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-2">Cronômetro de Estudo</span>
-                                        <div className="text-6xl font-black font-mono tracking-tighter mb-6 text-white">
-                                            {formatarChrono(segundos)}
-                                        </div>
+                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Timer Ativo</span>
+                                        <div className="text-6xl font-black font-mono mb-6">{formatarChrono(segundos)}</div>
                                         <div className="flex gap-4">
-                                            {!ativo ? (
-                                                <button onClick={()=>setAtivo(true)} className="bg-blue-600 hover:bg-blue-500 px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2">
-                                                    <span>▶</span> INICIAR
-                                                </button>
-                                            ) : (
-                                                <button onClick={()=>setAtivo(false)} className="bg-amber-500 hover:bg-amber-400 px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2 text-black">
-                                                    <span>⏸</span> PAUSAR
-                                                </button>
-                                            )}
-                                            <button onClick={()=>{setAtivo(false); setSegundos(0);}} className="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-xl font-bold transition-all">
-                                                REINICIAR
+                                            <button onClick={()=>setAtivo(!ativo)} className={`${ativo?'bg-amber-500 text-black':'bg-blue-600'} px-8 py-3 rounded-xl font-bold transition-all`}>
+                                                {ativo ? '⏸ PAUSAR' : '▶ INICIAR'}
                                             </button>
+                                            <button onClick={()=>{setAtivo(false); setSegundos(0);}} className="bg-slate-700 px-6 py-3 rounded-xl font-bold">REINICIAR</button>
                                         </div>
                                     </div>
 
-                                    {/* SELETOR E INFOS RÁPIDAS */}
                                     <div className="lg:w-1/2 flex flex-col justify-between gap-4">
                                         <div className="bg-[#262b36] p-6 rounded-[2rem] border border-slate-700/50 flex justify-between items-center">
-                                            <h2 className="text-xl font-bold">Meta Atual</h2>
-                                            <select value={filtroMeta} onChange={(e)=>setFiltroMeta(e.target.value)} className="bg-slate-800 text-blue-400 px-6 py-3 rounded-xl outline-none font-black border border-slate-700">
-                                                {['Todas', ...new Set(plano.map(p => p.meta))].sort((a,b)=>a-b).map(m => (
-                                                    <option key={m} value={m}>{m === 'Todas' ? 'Visão Geral' : `Meta ${m}`}</option>
-                                                ))}
+                                            <h2 className="text-xl font-bold text-blue-400">Meta {filtroMeta}</h2>
+                                            <select value={filtroMeta} onChange={(e)=>setFiltroMeta(e.target.value)} className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 font-bold outline-none">
+                                                {['Todas', ...new Set(plano.map(p => p.meta))].sort((a,b)=>a-b).map(m => <option key={m} value={m}>{m==='Todas'?'Geral':`Meta ${m}`}</option>)}
                                             </select>
                                         </div>
                                         <div className="grid grid-cols-3 gap-4">
                                             <div className="bg-[#262b36] p-4 rounded-2xl border border-slate-700/50 text-center">
-                                                <p className="text-[9px] font-black text-slate-500 uppercase">Horas</p>
+                                                <p className="text-[10px] text-slate-500 font-black uppercase">Tempo</p>
                                                 <p className="text-xl font-black text-blue-400">{painelStats.horas}</p>
                                             </div>
                                             <div className="bg-[#262b36] p-4 rounded-2xl border border-slate-700/50 text-center">
-                                                <p className="text-[9px] font-black text-slate-500 uppercase">Questões</p>
+                                                <p className="text-[10px] text-slate-500 font-black uppercase">Questões</p>
                                                 <p className="text-xl font-black text-orange-400">{painelStats.questoes}</p>
                                             </div>
                                             <div className="bg-[#262b36] p-4 rounded-2xl border border-slate-700/50 text-center">
-                                                <p className="text-[9px] font-black text-slate-500 uppercase">Acerto</p>
+                                                <p className="text-[10px] text-slate-500 font-black uppercase">Acerto</p>
                                                 <p className="text-xl font-black text-green-400">{painelStats.desempenho}%</p>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* TABELA COM ORDEM */}
                                 <div className="bg-[#262b36] rounded-[2rem] overflow-hidden border border-slate-700/50 shadow-2xl">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="bg-[#1a1e26] text-slate-400 font-black uppercase text-[10px] border-b border-slate-700/50">
-                                            <tr>
-                                                <th className="p-6 w-16 text-center"># Ordem</th>
-                                                <th className="p-6">Meta</th>
-                                                <th className="p-6">Atividade / Assunto</th>
-                                                <th className="p-6 text-center">Tempo Líquido</th>
-                                                <th className="p-6 text-right">Ação</th>
-                                            </tr>
+                                        <thead className="bg-[#1a1e26] text-slate-500 font-black uppercase text-[10px]">
+                                            <tr><th className="p-6 text-center">#</th><th className="p-6">Meta</th><th className="p-6">Atividade</th><th className="p-6 text-center">Tempo</th><th className="p-6 text-right">Ação</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-700/50">
-                                            {plano.filter(p => filtroMeta === 'Todas' || p.meta === parseInt(filtroMeta)).map((p, index) => {
+                                            {plano.filter(p => filtroMeta === 'Todas' || p.meta === parseInt(filtroMeta)).map((p, idx) => {
                                                 const tempo = sessoes.filter(s => s.cronograma_id === p.id).reduce((a,b)=>a+b.tempo, 0);
                                                 return (
-                                                    <tr key={p.id} className="hover:bg-white/[0.02] transition-all group">
-                                                        <td className="p-6 text-center font-black text-slate-600 group-hover:text-blue-500">{index + 1}º</td>
-                                                        <td className="p-6 text-blue-400 font-black italic">M{p.meta}</td>
-                                                        <td className="p-6 font-bold">
-                                                            {p.disciplina} 
-                                                            <span className="ml-2 bg-slate-800 text-[9px] px-2 py-1 rounded text-slate-400 uppercase">{p.status}</span>
-                                                            <br/><span className="text-xs text-slate-500 font-normal italic">{p.assunto}</span>
-                                                        </td>
-                                                        <td className="p-6 text-center font-mono text-slate-300">{tempo}m</td>
-                                                        <td className="p-6 text-right">
-                                                            <button onClick={()=>setTarefaAtiva(p)} className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-xl text-white font-black text-xs transition-all shadow-lg shadow-blue-900/20">ESTUDAR</button>
-                                                        </td>
+                                                    <tr key={p.id} className="hover:bg-white/[0.02] group transition-colors">
+                                                        <td className="p-6 text-center font-black text-slate-600">{idx+1}º</td>
+                                                        <td className="p-6 text-blue-400 font-black">M{p.meta}</td>
+                                                        <td className="p-6"><span className="font-bold">{p.disciplina}</span><br/><span className="text-xs text-slate-500">{p.assunto} ({p.status})</span></td>
+                                                        <td className="p-6 text-center font-mono">{tempo}m</td>
+                                                        <td className="p-6 text-right"><button onClick={()=>setTarefaAtiva(p)} className="bg-blue-600 px-6 py-2 rounded-xl font-black text-xs hover:bg-blue-500 transition-all">ESTUDAR</button></td>
                                                     </tr>
                                                 );
                                             })}
@@ -264,36 +251,25 @@
 
                         {aba === 'desempenho' && (
                             <div className="max-w-7xl mx-auto space-y-8">
-                                <h2 className="text-2xl font-bold flex items-center gap-2"><span className="text-green-400">📈</span> Análise de Evolução</h2>
                                 <div className="flex flex-col lg:flex-row gap-6">
                                     <div className="w-full lg:w-1/4 space-y-4">
-                                        <div className="card-blue p-6 rounded-2xl shadow-lg">
-                                            <p className="text-xs font-bold opacity-80 uppercase">Média Geral</p>
-                                            <p className="text-4xl font-black mt-1">{statsDesempenho.geral.perc}%</p>
-                                        </div>
-                                        <div className="card-green p-6 rounded-2xl shadow-lg">
-                                            <p className="text-xs font-bold opacity-80 uppercase">Total Horas</p>
-                                            <p className="text-4xl font-black mt-1">{statsDesempenho.geral.horas}</p>
-                                        </div>
-                                        <div className="card-orange p-6 rounded-2xl shadow-lg">
-                                            <p className="text-xs font-bold opacity-80 uppercase">Total Questões</p>
-                                            <p className="text-4xl font-black mt-1">{statsDesempenho.geral.questoes}</p>
-                                        </div>
+                                        <div className="card-blue p-6 rounded-2xl"><p className="text-xs font-bold opacity-70 uppercase tracking-widest">Desempenho</p><p className="text-4xl font-black mt-1">{statsDesempenho.geral.perc}%</p></div>
+                                        <div className="card-green p-6 rounded-2xl"><p className="text-xs font-bold opacity-70 uppercase tracking-widest">Estudado</p><p className="text-4xl font-black mt-1">{statsDesempenho.geral.horas}</p></div>
+                                        <div className="card-orange p-6 rounded-2xl"><p className="text-xs font-bold opacity-70 uppercase tracking-widest">Questões</p><p className="text-4xl font-black mt-1">{statsDesempenho.geral.questoes}</p></div>
                                     </div>
-                                    <div className="w-full lg:w-3/4 bg-[#262b36] rounded-[2rem] overflow-hidden shadow-xl border border-slate-700/50">
-                                        <div className="overflow-x-auto h-[350px] custom-scrollbar">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-[#1a1e26] text-slate-300 font-black text-[10px] uppercase sticky top-0">
-                                                    <tr><th className="p-5">Disciplina</th><th className="p-5 text-center">Acertos</th><th className="p-5 text-center">Questões</th><th className="p-5 text-center">% Acerto</th><th className="p-5 text-right">Média/Sessão</th></tr>
+                                    <div className="w-full lg:w-3/4 bg-[#262b36] rounded-[2rem] border border-slate-700/50 overflow-hidden">
+                                        <div className="overflow-x-auto h-[320px] custom-scrollbar">
+                                            <table className="w-full text-left text-xs">
+                                                <thead className="bg-[#1a1e26] text-slate-400 font-black uppercase sticky top-0">
+                                                    <tr><th className="p-5">Disciplina</th><th className="p-5 text-center">Questões</th><th className="p-5 text-center">% Acerto</th><th className="p-5 text-right">Média</th></tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-700/50">
                                                     {statsDesempenho.tabela.map(d => (
                                                         <tr key={d.disciplina} className="hover:bg-white/[0.02]">
                                                             <td className="p-5 font-bold">{d.disciplina}</td>
-                                                            <td className="p-5 text-center font-mono">{d.acertos}</td>
                                                             <td className="p-5 text-center font-mono">{d.questoes}</td>
                                                             <td className="p-5 text-center font-black text-blue-400">{d.perc}%</td>
-                                                            <td className="p-5 text-right text-slate-500 font-mono">{d.tempoMedio}</td>
+                                                            <td className="p-5 text-right text-slate-500">{d.tempoMedio}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -302,55 +278,92 @@
                                     </div>
                                 </div>
 
-                                <div className="bg-[#262b36] p-8 rounded-[2.5rem] h-[450px] border border-slate-700/50 shadow-xl">
-                                    <h3 className="text-xs font-black text-slate-500 uppercase mb-8 tracking-[0.2em] text-center">Curva de Aprendizado (Metas)</h3>
-                                    {window.Recharts && (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={dadosEvolucao}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                                                <XAxis dataKey="name" stroke="#64748b" fontSize={10} axisLine={false} tickLine={false} />
-                                                <YAxis yAxisId="left" stroke="#3b82f6" fontSize={10} axisLine={false} tickLine={false} tickFormatter={v=>`${v}h`} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={10} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} />
-                                                <Tooltip contentStyle={{backgroundColor: '#0f172a', border: 'none', borderRadius: '15px'}} />
-                                                <Legend />
-                                                <Line yAxisId="left" type="monotone" dataKey="horas" name="Carga Horária" stroke="#3b82f6" strokeWidth={4} dot={{r:6}} />
-                                                <Line yAxisId="right" type="monotone" dataKey="desempenho" name="% Acertos" stroke="#10b981" strokeWidth={4} dot={{r:6}} />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    )}
+                                {/* Gráfico de Linha */}
+                                <div className="bg-[#262b36] p-8 rounded-[2rem] h-[400px] border border-slate-700/50 shadow-xl">
+                                    <h3 className="text-xs font-black text-slate-500 uppercase mb-8 text-center tracking-[0.3em]">Curva de Evolução Profissional</h3>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={dadosEvolucao}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                            <XAxis dataKey="name" stroke="#64748b" fontSize={10} />
+                                            <YAxis yAxisId="left" stroke="#3b82f6" fontSize={10} />
+                                            <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={10} />
+                                            <Tooltip contentStyle={{backgroundColor: '#0f172a', borderRadius: '12px', border: 'none'}} />
+                                            <Legend />
+                                            <Line yAxisId="left" type="monotone" dataKey="horas" name="Carga Horária (h)" stroke="#3b82f6" strokeWidth={4} />
+                                            <Line yAxisId="right" type="monotone" dataKey="desempenho" name="Desempenho (%)" stroke="#10b981" strokeWidth={4} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* NOVO: HISTÓRICO DE SESSÕES (PARA EDIÇÃO) */}
+                                <div className="bg-[#262b36] rounded-[2rem] border border-slate-700/50 overflow-hidden shadow-2xl">
+                                    <div className="p-6 bg-[#1a1e26] border-b border-slate-700/50 flex justify-between items-center">
+                                        <h3 className="text-sm font-black uppercase tracking-widest text-orange-400">Histórico de Sessões Recentes</h3>
+                                        <span className="text-[10px] text-slate-500 font-bold">Ajuste seus registros aqui</span>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-[#1f232b] text-slate-500 font-black uppercase border-b border-slate-700/50 sticky top-0">
+                                                <tr>
+                                                    <th className="p-5">Data/Hora</th>
+                                                    <th className="p-5">Disciplina</th>
+                                                    <th className="p-5 text-center">Tempo</th>
+                                                    <th className="p-5 text-center">Acertos/Questões</th>
+                                                    <th className="p-5 text-right">Ações</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-700/50">
+                                                {sessoes.map(s => (
+                                                    <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
+                                                        <td className="p-5 text-slate-500 font-mono">{new Date(s.created_at).toLocaleString()}</td>
+                                                        <td className="p-5 font-bold">{s.disciplina}<br/><span className="text-[10px] font-normal text-slate-500">{s.assunto}</span></td>
+                                                        <td className="p-5 text-center font-mono">{s.tempo} min</td>
+                                                        <td className="p-5 text-center font-black">
+                                                            <span className="text-green-500">{s.certas}</span> / {s.total}
+                                                            <span className="ml-2 text-blue-400 text-[10px]">({s.total > 0 ? Math.round((s.certas/s.total)*100) : 0}%)</span>
+                                                        </td>
+                                                        <td className="p-5 text-right space-x-4">
+                                                            <button onClick={()=>setEditandoSessao(s)} className="text-blue-400 hover:text-white transition-colors">✏️ Editar</button>
+                                                            <button onClick={()=>handleDeletarSessao(s.id)} className="text-red-900 hover:text-red-500 transition-colors">🗑️ Apagar</button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         )}
 
                         {aba === 'planejar' && (
                             <div className="max-w-2xl mx-auto space-y-8">
-                                <h2 className="text-2xl font-bold uppercase italic">Gestão de <span className="text-orange-500">Fluxo</span></h2>
+                                <h2 className="text-2xl font-black italic uppercase">Gestão de <span className="text-orange-500">Fluxo</span></h2>
                                 <form onSubmit={handleSalvarMeta} className="bg-[#262b36] p-8 rounded-[2rem] border border-slate-700/50 space-y-4">
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Nº Meta" className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold focus:border-blue-500 outline-none" required />
-                                        <select name="tipo" defaultValue={editando?.status} className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold">
+                                        <input name="meta" type="number" defaultValue={editando?.meta} placeholder="Nº Meta" className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold outline-none" required />
+                                        <select name="tipo" defaultValue={editando?.status} className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold outline-none">
                                             <option>Teoria</option><option>Questões</option><option>Revisão</option>
                                         </select>
                                     </div>
-                                    <select name="disciplina" defaultValue={editando?.disciplina} className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold">
+                                    <select name="disciplina" defaultValue={editando?.disciplina} className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold outline-none">
                                         {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
                                     </select>
-                                    <input name="assunto" defaultValue={editando?.assunto} placeholder="Qual o assunto hoje?" className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold focus:border-blue-500 outline-none" required />
+                                    <input name="assunto" defaultValue={editando?.assunto} placeholder="Assunto específico" className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 font-bold outline-none" required />
                                     <button className="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-black text-white transition-all uppercase tracking-widest">
-                                        {editando ? 'Atualizar Registro' : 'Lançar no Fluxo'}
+                                        {editando ? 'Atualizar Meta' : 'Criar Nova Meta'}
                                     </button>
                                 </form>
                                 <div className="space-y-3">
                                     {plano.map((t, idx) => (
-                                        <div key={t.id} className="bg-[#262b36] p-5 rounded-2xl border border-slate-700/50 flex justify-between items-center">
+                                        <div key={t.id} className="bg-[#262b36] p-5 rounded-2xl border border-slate-700/50 flex justify-between items-center group">
                                             <div>
                                                 <span className="text-[10px] font-black text-blue-400 uppercase italic">{idx+1}º • Meta {t.meta}</span>
                                                 <h4 className="font-bold">{t.disciplina}</h4>
                                                 <p className="text-xs text-slate-500 font-medium uppercase">{t.assunto}</p>
                                             </div>
-                                            <div className="flex gap-4">
-                                                <button onClick={()=>setEditando(t)} className="text-slate-500 hover:text-white transition-all">✏️</button>
-                                                <button onClick={()=>handleDeletarMeta(t.id)} className="text-slate-700 hover:text-red-500 transition-all">🗑️</button>
+                                            <div className="flex gap-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={()=>setEditando(t)} className="hover:text-blue-400">✏️</button>
+                                                <button onClick={()=>handleDeletarMeta(t.id)} className="hover:text-red-500">🗑️</button>
                                             </div>
                                         </div>
                                     ))}
@@ -359,38 +372,34 @@
                         )}
                     </main>
 
-                    {/* MODAL SESSÃO - COM DICA DO CRONÔMETRO */}
-                    {tarefaAtiva && (
+                    {/* MODAL (PODE SER PARA NOVO ESTUDO OU EDIÇÃO DE SESSÃO) */}
+                    {(tarefaAtiva || editandoSessao) && (
                         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-md">
-                            <div className="bg-[#1f232b] w-full max-w-sm p-10 rounded-[3rem] border border-blue-500/30 shadow-2xl">
-                                <h3 className="text-xl font-black mb-1">{tarefaAtiva.disciplina}</h3>
-                                <p className="text-blue-400 text-[10px] font-black mb-6 uppercase tracking-wider">{tarefaAtiva.assunto}</p>
+                            <div className="bg-[#1f232b] w-full max-w-sm p-10 rounded-[3rem] border border-blue-500/30 shadow-2xl relative">
+                                <h3 className="text-xl font-black mb-1">{tarefaAtiva?.disciplina || editandoSessao?.disciplina}</h3>
+                                <p className="text-blue-400 text-[10px] font-black mb-6 uppercase tracking-wider">{tarefaAtiva?.assunto || editandoSessao?.assunto}</p>
                                 
-                                {segundos > 0 && (
-                                    <div className="bg-blue-900/20 p-4 rounded-2xl mb-6 border border-blue-500/20 text-center">
-                                        <p className="text-[10px] font-black text-blue-300 uppercase mb-1">Tempo no Cronômetro</p>
-                                        <p className="font-mono text-xl font-bold">{formatarChrono(segundos)}</p>
-                                        <p className="text-[9px] text-blue-500 mt-1 italic">Dica: Isso dá aprox. {Math.round(segundos/60)} minutos.</p>
-                                    </div>
-                                )}
-
-                                <form onSubmit={handleSalvarSessao} className="space-y-4">
+                                <form onSubmit={handleSalvarSessao} className="space-y-5">
                                     <div>
-                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Tempo (minutos)</label>
-                                        <input name="tempo" type="number" defaultValue={Math.round(segundos/60) || ""} className="w-full bg-slate-800 p-4 rounded-2xl border border-slate-700 mt-1 font-black text-white focus:border-blue-500 outline-none" required />
+                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Tempo (Minutos)</label>
+                                        <input name="tempo" type="number" 
+                                            defaultValue={editandoSessao ? editandoSessao.tempo : (Math.round(segundos/60) || "")} 
+                                            className="w-full bg-slate-800 p-4 rounded-2xl border border-slate-700 mt-1 font-black text-white focus:border-blue-500 outline-none" required />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Questões</label>
-                                            <input name="total" type="number" className="w-full bg-slate-800 p-4 rounded-2xl border border-slate-700 mt-1 font-black outline-none" />
+                                            <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Questões</label>
+                                            <input name="total" type="number" defaultValue={editandoSessao?.total || ""} className="w-full bg-slate-800 p-4 rounded-2xl border border-slate-700 mt-1 font-black outline-none" />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Acertos</label>
-                                            <input name="certas" type="number" className="w-full bg-slate-800 p-4 rounded-2xl border border-slate-700 mt-1 font-black text-green-400 outline-none" />
+                                            <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Acertos</label>
+                                            <input name="certas" type="number" defaultValue={editandoSessao?.certas || ""} className="w-full bg-slate-800 p-4 rounded-2xl border border-slate-700 mt-1 font-black text-green-400 outline-none" />
                                         </div>
                                     </div>
-                                    <button className="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-black mt-4 shadow-xl shadow-blue-900/30">FINALIZAR SESSÃO</button>
-                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-500 hover:text-white font-bold text-[10px] pt-4 uppercase tracking-widest transition-all">Fechar</button>
+                                    <button className="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-black mt-4 shadow-xl transition-all">
+                                        {editandoSessao ? 'ATUALIZAR REGISTRO' : 'FINALIZAR SESSÃO'}
+                                    </button>
+                                    <button type="button" onClick={()=>{setTarefaAtiva(null); setEditandoSessao(null);}} className="w-full text-slate-500 hover:text-white font-bold text-[10px] uppercase tracking-[0.2em] transition-all">Cancelar</button>
                                 </form>
                             </div>
                         </div>
