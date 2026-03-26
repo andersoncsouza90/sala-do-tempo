@@ -3,29 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sala do Tempo - Performance</title>
+    <title>Sala do Tempo - Full</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.2/lib/Recharts.min.js"></script>
-    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f1a; color: white; margin: 0; }
         .glass-card { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
-        .btn-orange { background: #f97316; transition: all 0.2s; }
-        .btn-orange:hover { background: #ea580c; transform: translateY(-1px); shadow: 0 10px 15px -3px rgba(249, 115, 22, 0.4); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
-        
-        // Configuração Supabase
+        const { useState, useEffect } = React;
         const SUPABASE_URL = 'https://sflzuzorlmddprbkdczv.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3viV5YSChpIMXYHAz-e-5g_GzP1d0E8';
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -51,6 +46,19 @@
                 finally { setLoading(false); }
             }
 
+            async function handleSalvarCronograma(e) {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const dados = {
+                    meta: parseInt(fd.get('meta')),
+                    disciplina: fd.get('disciplina'),
+                    assunto: fd.get('assunto'),
+                    tipo: fd.get('tipo')
+                };
+                const { error } = await supabase.from('cronograma').insert([dados]);
+                if (!error) { fetchData(); e.target.reset(); alert("Salvo com sucesso!"); }
+            }
+
             async function salvarSessao(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
@@ -63,95 +71,39 @@
                     total: parseInt(fd.get('total')) || 0,
                     certas: parseInt(fd.get('certas')) || 0
                 };
-
                 const { error } = await supabase.from('sessoes').insert([payload]);
                 if (!error) { setTarefaAtiva(null); fetchData(); }
-                else { alert("Erro ao salvar no banco!"); }
             }
-
-            // Gráfico Seguro (Verifica se Recharts carregou)
-            const RenderGrafico = () => {
-                if (typeof Recharts === 'undefined') return <div className="text-slate-500 text-center py-20">Carregando gráficos...</div>;
-                
-                const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
-                const metas = [1,2,3,4,5,6,7,8,9,10,11,12,13,14];
-                const data = metas.map(m => ({
-                    name: `M${m}`,
-                    horas: sessoes.filter(s => s.meta === m).reduce((acc, curr) => acc + (curr.tempo / 60), 0)
-                }));
-
-                return (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={data}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                            <XAxis dataKey="name" stroke="#475569" fontSize={10} />
-                            <YAxis stroke="#475569" fontSize={10} />
-                            <Tooltip contentStyle={{backgroundColor: '#0b0f1a', border: 'none', borderRadius: '12px'}} />
-                            <Area type="monotone" dataKey="horas" stroke="#f97316" fill="#f97316" fillOpacity={0.1} strokeWidth={3} />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                );
-            };
 
             if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black">SALA DO TEMPO</div>;
 
             return (
                 <div className="flex min-h-screen">
-                    {/* Sidebar */}
-                    <aside className="w-20 md:w-64 bg-[#080c14] border-r border-slate-800 fixed h-full z-40">
-                        <div className="p-8 text-orange-500 font-black italic hidden md:block text-xl">SALA DO TEMPO</div>
-                        <nav className="p-4 space-y-4">
-                            <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-2xl flex gap-4 ${aba==='dashboard'?'bg-orange-500':'text-slate-500'}`}>
-                                📊 <span className="hidden md:block font-bold">Dashboard</span>
-                            </button>
-                            <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-2xl flex gap-4 ${aba==='planejar'?'bg-orange-500':'text-slate-500'}`}>
-                                📅 <span className="hidden md:block font-bold">Cronograma</span>
-                            </button>
-                        </nav>
+                    <aside className="w-20 md:w-64 bg-[#080c14] border-r border-slate-800 fixed h-full z-40 p-4 space-y-4">
+                        <div className="hidden md:block p-4 text-orange-500 font-black italic uppercase">Sala do Tempo</div>
+                        <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='dashboard'?'bg-orange-500':'text-slate-500'}`}>📊 <span className="hidden md:block">Painel</span></button>
+                        <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='planejar'?'bg-orange-500':'text-slate-500'}`}>📅 <span className="hidden md:block">Metas</span></button>
                     </aside>
 
                     <main className="flex-1 ml-20 md:ml-64 p-6 md:p-10">
                         {aba === 'dashboard' ? (
-                            <div className="max-w-6xl mx-auto space-y-8">
-                                <h2 className="text-3xl font-black italic uppercase">Evolução por <span className="text-orange-500">Meta</span></h2>
-                                
-                                <div className="glass-card p-6 rounded-[2.5rem] h-64 shadow-2xl">
-                                    <RenderGrafico />
-                                </div>
-
+                            <div className="max-w-5xl mx-auto space-y-6">
+                                <h2 className="text-3xl font-black italic">DASHBOARD</h2>
                                 <div className="glass-card rounded-[2rem] overflow-hidden">
-                                    <table className="w-full text-left">
-                                        <thead className="bg-slate-900/50 text-[10px] uppercase text-slate-500 font-black">
-                                            <tr>
-                                                <th className="p-6">Meta</th>
-                                                <th className="p-6">Disciplina</th>
-                                                <th className="p-6 text-center">Tempo</th>
-                                                <th className="p-6 text-center">% Acerto</th>
-                                                <th className="p-6 text-right">Ação</th>
-                                            </tr>
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-900/50 text-slate-500 uppercase text-[10px] font-black">
+                                            <tr><th className="p-6">Meta</th><th className="p-6">Disciplina</th><th className="p-6 text-center">Tempo</th><th className="p-6 text-right">Ação</th></tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-800/50 font-bold">
+                                        <tbody className="divide-y divide-slate-800/50">
                                             {plano.map(p => {
                                                 const exec = sessoes.filter(s => s.cronograma_id === p.id);
                                                 const tempo = exec.reduce((a,b)=>a+b.tempo, 0);
-                                                const qT = exec.reduce((a,b)=>a+b.total, 0);
-                                                const qC = exec.reduce((a,b)=>a+b.certas, 0);
-                                                const perc = qT > 0 ? Math.round((qC/qT)*100) : 0;
-
                                                 return (
                                                     <tr key={p.id} className="hover:bg-white/[0.02]">
-                                                        <td className="p-6 text-orange-500">M{p.meta}</td>
-                                                        <td className="p-6">
-                                                            <div>{p.disciplina}</div>
-                                                            <div className="text-[10px] text-slate-500 font-normal">{p.assunto}</div>
-                                                        </td>
-                                                        <td className="p-6 text-center text-sm">{tempo} min</td>
-                                                        <td className="p-6 text-center">
-                                                            <div className={`text-xl ${perc >= 70 ? 'text-emerald-500' : 'text-orange-500'}`}>{qT > 0 ? `${perc}%` : '--'}</div>
-                                                        </td>
-                                                        <td className="p-6 text-right">
-                                                            <button onClick={()=>setTarefaAtiva(p)} className="p-2 bg-orange-500 rounded-lg text-white">▶</button>
-                                                        </td>
+                                                        <td className="p-6 text-orange-500 font-black">M{p.meta}</td>
+                                                        <td className="p-6 font-bold">{p.disciplina}<br/><span className="text-[10px] text-slate-500 font-normal uppercase">{p.assunto}</span></td>
+                                                        <td className="p-6 text-center font-mono">{tempo}m</td>
+                                                        <td className="p-6 text-right"><button onClick={()=>setTarefaAtiva(p)} className="bg-orange-500 p-2 rounded-lg">▶</button></td>
                                                     </tr>
                                                 );
                                             })}
@@ -160,29 +112,34 @@
                                 </div>
                             </div>
                         ) : (
-                            <div className="max-w-xl mx-auto py-10 text-center">
-                                <h2 className="text-3xl font-black mb-10 italic">Aba de Planejamento</h2>
-                                <div className="p-20 border-2 border-dashed border-slate-800 rounded-[3rem] text-slate-600">
-                                    Cadastre suas metas para que elas apareçam no Dashboard.
-                                </div>
+                            <div className="max-w-2xl mx-auto space-y-10">
+                                <h2 className="text-3xl font-black italic">CADASTRAR META</h2>
+                                <form onSubmit={handleSalvarCronograma} className="glass-card p-8 rounded-[2.5rem] grid grid-cols-2 gap-4">
+                                    <input name="meta" type="number" placeholder="Nº da Meta" className="bg-slate-900 p-4 rounded-xl outline-none border border-slate-800" required />
+                                    <select name="tipo" className="bg-slate-900 p-4 rounded-xl outline-none border border-slate-800">
+                                        <option>Teoria</option><option>Questões</option><option>Revisão</option>
+                                    </select>
+                                    <select name="disciplina" className="col-span-2 bg-slate-900 p-4 rounded-xl outline-none border border-slate-800">
+                                        {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
+                                    </select>
+                                    <input name="assunto" placeholder="Assunto específico" className="col-span-2 bg-slate-900 p-4 rounded-xl outline-none border border-slate-800" required />
+                                    <button className="col-span-2 bg-orange-500 py-4 rounded-xl font-black uppercase">Adicionar ao Cronograma</button>
+                                </form>
                             </div>
                         )}
                     </main>
 
-                    {/* Modal Registro */}
                     {tarefaAtiva && (
-                        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-[#0b0f1a] w-full max-w-sm p-10 rounded-[3rem] border border-orange-500/30">
+                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+                            <div className="bg-[#0b0f1a] w-full max-w-sm p-10 rounded-[2.5rem] border border-orange-500/30">
                                 <h3 className="text-xl font-black mb-1">{tarefaAtiva.disciplina}</h3>
-                                <p className="text-orange-500 text-xs font-bold mb-8 italic uppercase">{tarefaAtiva.assunto}</p>
+                                <p className="text-orange-500 text-xs font-bold mb-6 italic uppercase">{tarefaAtiva.assunto}</p>
                                 <form onSubmit={salvarSessao} className="space-y-4">
-                                    <input name="tempo" type="number" placeholder="Tempo (min)" className="w-full bg-slate-900 p-4 rounded-2xl border border-slate-800" required />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input name="total" type="number" placeholder="Questões" className="w-full bg-slate-900 p-4 rounded-2xl border border-slate-800" />
-                                        <input name="certas" type="number" placeholder="Certas" className="w-full bg-slate-900 p-4 rounded-2xl border border-emerald-900/30 text-emerald-400" />
-                                    </div>
-                                    <button className="w-full btn-orange py-5 rounded-2xl font-black">SALVAR ESTUDO</button>
-                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-600 font-bold text-xs uppercase mt-4">Fechar</button>
+                                    <input name="tempo" type="number" placeholder="Tempo (min)" className="w-full bg-slate-900 p-4 rounded-xl border border-slate-800" required />
+                                    <input name="total" type="number" placeholder="Qtd Questões" className="w-full bg-slate-900 p-4 rounded-xl border border-slate-800" />
+                                    <input name="certas" type="number" placeholder="Acertos" className="w-full bg-slate-900 p-4 rounded-xl border border-emerald-900/30 text-emerald-400" />
+                                    <button className="w-full bg-orange-500 py-4 rounded-xl font-black uppercase">Salvar Estudo</button>
+                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-600 font-bold text-xs uppercase pt-2">Cancelar</button>
                                 </form>
                             </div>
                         </div>
