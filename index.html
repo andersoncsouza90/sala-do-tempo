@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sala do Tempo - Full</title>
+    <title>Sala do Tempo - Debug Mode</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -49,14 +49,27 @@
             async function handleSalvarCronograma(e) {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                const dados = {
+                
+                // Mapeando exatamente o que está na sua foto do banco de dados
+                const novoItem = {
                     meta: parseInt(fd.get('meta')),
                     disciplina: fd.get('disciplina'),
                     assunto: fd.get('assunto'),
-                    tipo: fd.get('tipo')
+                    status: fd.get('tipo') // Na sua foto a coluna chama 'status', vamos enviar o tipo pra lá
                 };
-                const { error } = await supabase.from('cronograma').insert([dados]);
-                if (!error) { fetchData(); e.target.reset(); alert("Salvo com sucesso!"); }
+
+                console.log("Tentando salvar:", novoItem);
+
+                const { data, error } = await supabase.from('cronograma').insert([novoItem]).select();
+
+                if (error) {
+                    console.error("Erro detalhado do Supabase:", error);
+                    alert(`Erro ao salvar: ${error.message}\nVerifique o console (F12) para detalhes.`);
+                } else {
+                    alert("Tarefa adicionada com sucesso!");
+                    fetchData();
+                    e.target.reset();
+                }
             }
 
             async function salvarSessao(e) {
@@ -69,10 +82,12 @@
                     assunto: tarefaAtiva.assunto,
                     tempo: parseInt(fd.get('tempo')) || 0,
                     total: parseInt(fd.get('total')) || 0,
-                    certas: parseInt(fd.get('certas')) || 0
+                    certas: parseInt(fd.get('certas')) || 0,
+                    tipo: tarefaAtiva.status // Usando o que veio do cronograma
                 };
                 const { error } = await supabase.from('sessoes').insert([payload]);
                 if (!error) { setTarefaAtiva(null); fetchData(); }
+                else { alert("Erro ao salvar sessão: " + error.message); }
             }
 
             if (loading) return <div className="h-screen flex items-center justify-center text-orange-500 font-black">SALA DO TEMPO</div>;
@@ -80,30 +95,56 @@
             return (
                 <div className="flex min-h-screen">
                     <aside className="w-20 md:w-64 bg-[#080c14] border-r border-slate-800 fixed h-full z-40 p-4 space-y-4">
-                        <div className="hidden md:block p-4 text-orange-500 font-black italic uppercase">Sala do Tempo</div>
-                        <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='dashboard'?'bg-orange-500':'text-slate-500'}`}>📊 <span className="hidden md:block">Painel</span></button>
-                        <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-xl flex gap-4 ${aba==='planejar'?'bg-orange-500':'text-slate-500'}`}>📅 <span className="hidden md:block">Metas</span></button>
+                        <div className="hidden md:block p-4 text-orange-500 font-black italic uppercase text-center border-b border-slate-800 mb-4">Sala do Tempo</div>
+                        <button onClick={()=>setAba('dashboard')} className={`w-full p-4 rounded-xl flex items-center justify-center md:justify-start gap-4 transition-all ${aba==='dashboard'?'bg-orange-500 text-white shadow-lg shadow-orange-500/20':'text-slate-500 hover:text-white'}`}>
+                            <span>📊</span> <span className="hidden md:block font-bold">Painel</span>
+                        </button>
+                        <button onClick={()=>setAba('planejar')} className={`w-full p-4 rounded-xl flex items-center justify-center md:justify-start gap-4 transition-all ${aba==='planejar'?'bg-orange-500 text-white shadow-lg shadow-orange-500/20':'text-slate-500 hover:text-white'}`}>
+                            <span>📅</span> <span className="hidden md:block font-bold">Metas</span>
+                        </button>
                     </aside>
 
                     <main className="flex-1 ml-20 md:ml-64 p-6 md:p-10">
                         {aba === 'dashboard' ? (
-                            <div className="max-w-5xl mx-auto space-y-6">
-                                <h2 className="text-3xl font-black italic">DASHBOARD</h2>
-                                <div className="glass-card rounded-[2rem] overflow-hidden">
+                            <div className="max-w-5xl mx-auto space-y-8">
+                                <header className="flex justify-between items-end">
+                                    <div>
+                                        <h2 className="text-3xl font-black italic">DASHBOARD</h2>
+                                        <p className="text-slate-500 text-sm uppercase font-bold">Acompanhamento de progresso</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-orange-500 font-black text-4xl italic">{sessoes.length}</span>
+                                        <p className="text-[10px] text-slate-500 font-black uppercase">Sessões Realizadas</p>
+                                    </div>
+                                </header>
+                                
+                                <div className="glass-card rounded-[2rem] overflow-hidden border border-slate-800/50">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="bg-slate-900/50 text-slate-500 uppercase text-[10px] font-black">
-                                            <tr><th className="p-6">Meta</th><th className="p-6">Disciplina</th><th className="p-6 text-center">Tempo</th><th className="p-6 text-right">Ação</th></tr>
+                                        <thead className="bg-slate-900/80 text-slate-500 uppercase text-[10px] font-black">
+                                            <tr>
+                                                <th className="p-6">Meta</th>
+                                                <th className="p-6">Disciplina / Assunto</th>
+                                                <th className="p-6 text-center">Tempo Acumulado</th>
+                                                <th className="p-6 text-right">Ação</th>
+                                            </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/50">
-                                            {plano.map(p => {
+                                            {plano.length === 0 ? (
+                                                <tr><td colSpan="4" className="p-20 text-center text-slate-600 font-bold italic uppercase">Nenhuma meta cadastrada no cronograma.</td></tr>
+                                            ) : plano.map(p => {
                                                 const exec = sessoes.filter(s => s.cronograma_id === p.id);
                                                 const tempo = exec.reduce((a,b)=>a+b.tempo, 0);
                                                 return (
-                                                    <tr key={p.id} className="hover:bg-white/[0.02]">
+                                                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors group">
                                                         <td className="p-6 text-orange-500 font-black">M{p.meta}</td>
-                                                        <td className="p-6 font-bold">{p.disciplina}<br/><span className="text-[10px] text-slate-500 font-normal uppercase">{p.assunto}</span></td>
-                                                        <td className="p-6 text-center font-mono">{tempo}m</td>
-                                                        <td className="p-6 text-right"><button onClick={()=>setTarefaAtiva(p)} className="bg-orange-500 p-2 rounded-lg">▶</button></td>
+                                                        <td className="p-6">
+                                                            <div className="font-bold text-slate-200 group-hover:text-white">{p.disciplina}</div>
+                                                            <div className="text-[10px] text-slate-500 font-normal uppercase italic">{p.assunto}</div>
+                                                        </td>
+                                                        <td className="p-6 text-center font-mono font-bold text-slate-300">{tempo} min</td>
+                                                        <td className="p-6 text-right">
+                                                            <button onClick={()=>setTarefaAtiva(p)} className="bg-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white p-3 rounded-xl transition-all">▶</button>
+                                                        </td>
                                                     </tr>
                                                 );
                                             })}
@@ -113,33 +154,62 @@
                             </div>
                         ) : (
                             <div className="max-w-2xl mx-auto space-y-10">
-                                <h2 className="text-3xl font-black italic">CADASTRAR META</h2>
-                                <form onSubmit={handleSalvarCronograma} className="glass-card p-8 rounded-[2.5rem] grid grid-cols-2 gap-4">
-                                    <input name="meta" type="number" placeholder="Nº da Meta" className="bg-slate-900 p-4 rounded-xl outline-none border border-slate-800" required />
-                                    <select name="tipo" className="bg-slate-900 p-4 rounded-xl outline-none border border-slate-800">
-                                        <option>Teoria</option><option>Questões</option><option>Revisão</option>
-                                    </select>
-                                    <select name="disciplina" className="col-span-2 bg-slate-900 p-4 rounded-xl outline-none border border-slate-800">
-                                        {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
-                                    </select>
-                                    <input name="assunto" placeholder="Assunto específico" className="col-span-2 bg-slate-900 p-4 rounded-xl outline-none border border-slate-800" required />
-                                    <button className="col-span-2 bg-orange-500 py-4 rounded-xl font-black uppercase">Adicionar ao Cronograma</button>
+                                <div>
+                                    <h2 className="text-3xl font-black italic">PLANEJAMENTO</h2>
+                                    <p className="text-slate-500 text-sm uppercase font-bold">Alimente seu cronograma de estudos</p>
+                                </div>
+                                <form onSubmit={handleSalvarCronograma} className="glass-card p-8 rounded-[2.5rem] grid grid-cols-2 gap-6 border border-slate-800">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Nº da Meta</label>
+                                        <input name="meta" type="number" placeholder="Ex: 1" className="w-full bg-slate-950 p-4 rounded-2xl outline-none border border-slate-800 focus:border-orange-500 transition-colors font-bold" required />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Tipo de Estudo</label>
+                                        <select name="tipo" className="w-full bg-slate-950 p-4 rounded-2xl outline-none border border-slate-800 font-bold">
+                                            <option>Teoria</option><option>Questões</option><option>Revisão</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2 space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Disciplina</label>
+                                        <select name="disciplina" className="w-full bg-slate-950 p-4 rounded-2xl outline-none border border-slate-800 font-bold">
+                                            {DISCIPLINAS.map(d=><option key={d}>{d}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2 space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Assunto Específico</label>
+                                        <input name="assunto" placeholder="Ex: Atos Administrativos" className="w-full bg-slate-950 p-4 rounded-2xl outline-none border border-slate-800 focus:border-orange-500 transition-colors font-bold" required />
+                                    </div>
+                                    <button type="submit" className="col-span-2 bg-orange-500 hover:bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-orange-500/20 transition-all">
+                                        Adicionar ao Cronograma
+                                    </button>
                                 </form>
                             </div>
                         )}
                     </main>
 
+                    {/* Modal Estudo */}
                     {tarefaAtiva && (
-                        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-                            <div className="bg-[#0b0f1a] w-full max-w-sm p-10 rounded-[2.5rem] border border-orange-500/30">
+                        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                            <div className="bg-[#0b0f1a] w-full max-w-sm p-10 rounded-[3rem] border border-orange-500/30 shadow-2xl">
                                 <h3 className="text-xl font-black mb-1">{tarefaAtiva.disciplina}</h3>
-                                <p className="text-orange-500 text-xs font-bold mb-6 italic uppercase">{tarefaAtiva.assunto}</p>
-                                <form onSubmit={salvarSessao} className="space-y-4">
-                                    <input name="tempo" type="number" placeholder="Tempo (min)" className="w-full bg-slate-900 p-4 rounded-xl border border-slate-800" required />
-                                    <input name="total" type="number" placeholder="Qtd Questões" className="w-full bg-slate-900 p-4 rounded-xl border border-slate-800" />
-                                    <input name="certas" type="number" placeholder="Acertos" className="w-full bg-slate-900 p-4 rounded-xl border border-emerald-900/30 text-emerald-400" />
-                                    <button className="w-full bg-orange-500 py-4 rounded-xl font-black uppercase">Salvar Estudo</button>
-                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-600 font-bold text-xs uppercase pt-2">Cancelar</button>
+                                <p className="text-orange-500 text-[10px] font-black mb-8 italic uppercase tracking-tighter">{tarefaAtiva.assunto}</p>
+                                <form onSubmit={salvarSessao} className="space-y-6">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-600 uppercase ml-2">Tempo (min)</label>
+                                        <input name="tempo" type="number" className="w-full bg-slate-900 p-4 rounded-2xl border border-slate-800 font-bold" required />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-600 uppercase ml-2">Questões</label>
+                                            <input name="total" type="number" className="w-full bg-slate-900 p-4 rounded-2xl border border-slate-800 font-bold" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-600 uppercase ml-2">Certas</label>
+                                            <input name="certas" type="number" className="w-full bg-slate-900 p-4 rounded-2xl border border-emerald-950/50 text-emerald-400 font-bold" />
+                                        </div>
+                                    </div>
+                                    <button className="w-full bg-orange-500 py-5 rounded-2xl font-black uppercase shadow-lg shadow-orange-500/20">Finalizar Estudo</button>
+                                    <button type="button" onClick={()=>setTarefaAtiva(null)} className="w-full text-slate-600 font-bold text-[10px] uppercase pt-2">Voltar</button>
                                 </form>
                             </div>
                         </div>
